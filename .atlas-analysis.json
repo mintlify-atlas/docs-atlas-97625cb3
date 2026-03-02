@@ -1,0 +1,202 @@
+{
+  "projectType": "saas",
+  "projectName": "Helicone",
+  "projectDescription": "Open-source LLM observability platform and AI gateway for monitoring, evaluating, and experimenting with AI applications",
+  "theme": "aspen",
+  "primaryColor": "#3188ad",
+  "lightColor": "#e4f0f7",
+  "darkColor": "#7e8385",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "platform-overview"
+            ]
+          },
+          {
+            "group": "AI Gateway",
+            "pages": [
+              "gateway/overview",
+              "gateway/quickstart",
+              "gateway/routing",
+              "gateway/fallbacks",
+              "gateway/caching",
+              "gateway/rate-limiting"
+            ]
+          },
+          {
+            "group": "Observability",
+            "pages": [
+              "observability/overview",
+              "observability/requests",
+              "observability/sessions",
+              "observability/traces",
+              "observability/custom-properties",
+              "observability/user-metrics",
+              "observability/cost-tracking"
+            ]
+          },
+          {
+            "group": "Prompts",
+            "pages": [
+              "prompts/overview",
+              "prompts/versioning",
+              "prompts/deployment",
+              "prompts/sdk"
+            ]
+          },
+          {
+            "group": "Evaluations",
+            "pages": [
+              "evaluations/overview",
+              "evaluations/scores",
+              "evaluations/datasets",
+              "evaluations/experiments"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/overview",
+              "integrations/openai",
+              "integrations/anthropic",
+              "integrations/langchain",
+              "integrations/vercel-ai-sdk",
+              "integrations/llamaindex"
+            ]
+          },
+          {
+            "group": "Self-Hosting",
+            "pages": [
+              "self-hosting/overview",
+              "self-hosting/docker",
+              "self-hosting/kubernetes",
+              "self-hosting/configuration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "AI Gateway",
+            "pages": [
+              "api-reference/gateway/chat-completions",
+              "api-reference/gateway/models"
+            ]
+          },
+          {
+            "group": "Requests",
+            "pages": [
+              "api-reference/requests/query",
+              "api-reference/requests/get",
+              "api-reference/requests/feedback",
+              "api-reference/requests/properties",
+              "api-reference/requests/scores"
+            ]
+          },
+          {
+            "group": "Sessions",
+            "pages": [
+              "api-reference/sessions/query",
+              "api-reference/sessions/metrics",
+              "api-reference/sessions/feedback"
+            ]
+          },
+          {
+            "group": "Prompts",
+            "pages": [
+              "api-reference/prompts/create",
+              "api-reference/prompts/get",
+              "api-reference/prompts/update",
+              "api-reference/prompts/query",
+              "api-reference/prompts/versions"
+            ]
+          },
+          {
+            "group": "Evaluations",
+            "pages": [
+              "api-reference/evaluations/query",
+              "api-reference/evaluations/scores",
+              "api-reference/evaluations/create"
+            ]
+          },
+          {
+            "group": "Users",
+            "pages": [
+              "api-reference/users/query",
+              "api-reference/users/metrics"
+            ]
+          },
+          {
+            "group": "Webhooks",
+            "pages": [
+              "api-reference/webhooks/list",
+              "api-reference/webhooks/create",
+              "api-reference/webhooks/delete"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Tutorials",
+            "pages": [
+              "guides/ai-agents",
+              "guides/cost-tracking",
+              "guides/debugging",
+              "guides/fine-tuning"
+            ]
+          },
+          {
+            "group": "Best Practices",
+            "pages": [
+              "guides/prompt-engineering",
+              "guides/error-handling",
+              "guides/security"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "AI Gateway with 100+ model providers and intelligent routing",
+    "Real-time LLM observability and request tracing",
+    "Session tracking and agent tracing",
+    "Prompt management and versioning",
+    "Cost and latency analytics",
+    "Evaluations and datasets",
+    "Custom rate limiting and caching",
+    "Webhooks and integrations",
+    "Self-hosting capabilities"
+  ],
+  "publicApiSurface": [
+    "POST /v1/chat/completions - AI Gateway chat completions",
+    "POST /v1/request/query - Query requests",
+    "GET /v1/request - Get single request",
+    "POST /v1/request/feedback - Submit feedback",
+    "POST /v1/session/query - Query sessions",
+    "POST /v1/prompt/2025 - Create prompt",
+    "GET /v1/prompt/2025/{id} - Get prompt",
+    "POST /v1/prompt/2025/query - Query prompts",
+    "POST /v1/evals/query - Query evaluations",
+    "POST /v1/evals - Create evaluation",
+    "POST /v1/user/query - Query users",
+    "POST /v1/user/metrics/query - Query user metrics",
+    "GET /v1/webhooks - List webhooks",
+    "POST /v1/webhooks - Create webhook",
+    "@helicone/async - Async logging SDK (TypeScript)",
+    "@helicone/helpers - Helper utilities SDK (TypeScript)",
+    "helicone[async] - Async logging SDK (Python)"
+  ]
+}
