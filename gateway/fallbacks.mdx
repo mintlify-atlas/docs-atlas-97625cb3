@@ -1,0 +1,541 @@
+---
+title: "Automatic Fallbacks"
+description: "Configure automatic fallback chains to ensure high availability and resilience across AI providers"
+icon: "shield-halved"
+---
+
+Helicone's AI Gateway provides automatic fallback mechanisms to ensure your application stays resilient when providers experience downtime, rate limits, or errors.
+
+## How Fallbacks Work
+
+When a request fails, the gateway:
+
+1. **Detects the failure** - Identifies error codes, rate limits, or provider issues
+2. **Checks fallback configuration** - Determines if fallbacks are configured
+3. **Tries the next option** - Routes to the next provider in the chain
+4. **Returns on success** - Stops trying once a provider succeeds
+5. **Reports the result** - Logs which fallback was used
+
+```typescript
+// worker/src/routers/gatewayRouter.ts:199-240
+// Fallback loop executes until success or all options exhausted:
+for (const [i, fallback] of enumerate(fallbacks)) {
+  const response = await forwarder(targetBaseUrl);
+  if (onCodes.includes(response.status) && i !== fallbacks.length - 1) {
+    console.log(targetBaseUrl, "failed, trying next fallback");
+  } else {
+    response.headers.set("helicone-fallback-index", i.toString());
+    return response;
+  }
+}
+```
+
+## Built-in Model Fallbacks
+
+The simplest way to configure fallbacks is using comma-separated models:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import OpenAI from "openai";
+
+    const client = new OpenAI({
+      baseURL: "https://ai-gateway.helicone.ai",
+      apiKey: process.env.HELICONE_API_KEY,
+    });
+
+    const response = await client.chat.completions.create({
+      // Try GPT-4o first, fall back to Claude, then Gemini
+      model: "gpt-4o,claude-sonnet-4,gemini-2.0-flash",
+      messages: [
+        { role: "user", content: "What is the capital of France?" }
+      ],
+    });
+
+    // Check which model was used
+    console.log("Model used:", response.model);
+    ```
+  </Tab>
+  
+  <Tab title="Python">
+    ```python
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url="https://ai-gateway.helicone.ai",
+        api_key="YOUR_HELICONE_API_KEY"
+    )
+
+    response = client.chat.completions.create(
+        # Try GPT-4o first, fall back to Claude, then Gemini
+        model="gpt-4o,claude-sonnet-4,gemini-2.0-flash",
+        messages=[
+            {"role": "user", "content": "What is the capital of France?"}
+        ],
+    )
+
+    # Check which model was used
+    print(f"Model used: {response.model}")
+    ```
+  </Tab>
+</Tabs>
+
+The gateway automatically tries each model in order until one succeeds.
+
+## Fallback Triggers
+
+Fallbacks are triggered by:
+
+### Provider Errors
+
+- **5xx errors** - Server errors, downtime
+- **429 errors** - Rate limits (from provider, not Helicone)
+- **503 errors** - Service unavailable
+- **Authentication failures** - Invalid or expired keys
+
+### Helicone Errors
+
+- **Insufficient credits** - When using PTB with no credits remaining
+- **BYOK key issues** - Invalid or missing provider keys
+
+<Note>
+Helicone-generated 429s (rate limits or credit issues) cause immediate failure without fallback to prevent cost overruns.
+</Note>
+
+## Advanced Fallback Configuration
+
+For more control, use the `Helicone-Fallbacks` header:
+
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+const fallbackConfig = [
+  {
+    "target-url": "https://api.openai.com/v1",
+    "headers": {
+      "Authorization": "Bearer sk-..."
+    },
+    "onCodes": [429, 500, 503],
+    "bodyKeyOverride": {}
+  },
+  {
+    "target-url": "https://api.anthropic.com/v1",
+    "headers": {
+      "x-api-key": "sk-ant-...",
+      "anthropic-version": "2023-06-01"
+    },
+    "onCodes": [429, 500, 503],
+    "bodyKeyOverride": {}
+  }
+];
+
+const response = await client.chat.completions.create(
+  {
+    model: "gpt-4o",
+    messages: [{ role: "user", content: "Hello!" }],
+  },
+  {
+    headers: {
+      "Helicone-Fallbacks": JSON.stringify(fallbackConfig),
+    },
+  }
+);
+```
+
+### Fallback Configuration Options
+
+<ParamField path="target-url" type="string" required>
+  Base URL for the provider endpoint
+</ParamField>
+
+<ParamField path="headers" type="object" required>
+  Authentication and other headers for the provider
+</ParamField>
+
+<ParamField path="onCodes" type="array" required>
+  HTTP status codes or ranges that trigger fallback:
+  ```typescript
+  // Specific codes
+  "onCodes": [429, 500, 503]
+  
+  // Code ranges
+  "onCodes": [{"from": 500, "to": 599}]
+  
+  // Mixed
+  "onCodes": [429, {"from": 500, "to": 599}]
+  ```
+</ParamField>
+
+<ParamField path="bodyKeyOverride" type="object">
+  Override specific request body keys for this fallback
+</ParamField>
+
+## Common Fallback Patterns
+
+### High Availability Pattern
+
+Maximize uptime with multiple providers:
+
+```typescript
+// Try primary, then multiple fallbacks
+const response = await client.chat.completions.create({
+  model: "gpt-4o,claude-sonnet-4,gemini-2.0-flash,llama-3.3-70b",
+  messages: [{ role: "user", content: userMessage }],
+});
+```
+
+### Cost Optimization Pattern
+
+Try cheaper options first:
+
+```typescript
+// Start with cheapest, fall back to expensive if needed
+const response = await client.chat.completions.create({
+  model: "gpt-4o-mini,gpt-4o,claude-sonnet-4",
+  messages: [{ role: "user", content: "Simple query" }],
+});
+```
+
+### Speed Priority Pattern
+
+Prioritize fastest providers:
+
+```typescript
+// Try fastest providers first
+const response = await client.chat.completions.create({
+  model: "groq/llama-3.3-70b,gemini-2.0-flash,gpt-4o-mini",
+  messages: [{ role: "user", content: "Quick question" }],
+});
+```
+
+### Regional Compliance Pattern
+
+Stay compliant with data residency:
+
+```typescript
+// Try EU-based providers only
+const response = await client.chat.completions.create({
+  model: "gpt-4o/azure,claude-sonnet-4/anthropic,mistral-large",
+  messages: [{ role: "user", content: "EU user query" }],
+});
+```
+
+## Rate Limit Handling
+
+Handle provider rate limits gracefully:
+
+```typescript
+// Distribute across providers to avoid rate limits
+const response = await client.chat.completions.create({
+  model: "gpt-4o/openai,gpt-4o/azure,claude-sonnet-4",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+When the first provider hits rate limits (429), the gateway automatically tries the next.
+
+<Warning>
+Helicone's own rate limits (configured via `Helicone-RateLimit-Policy`) will cause immediate failure without fallback. This is intentional to prevent unexpected costs.
+</Warning>
+
+## BYOK + PTB Fallback
+
+The gateway automatically falls back from BYOK to PTB:
+
+```typescript
+// If you have OpenAI key configured (BYOK):
+// 1. Tries your OpenAI key first
+// 2. If it fails, tries Helicone's key (PTB)
+// 3. If OpenAI is unavailable, tries Claude
+
+const response = await client.chat.completions.create({
+  model: "gpt-4o,claude-sonnet-4",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+Priority order:
+1. `gpt-4o/openai/byok` - Your OpenAI key
+2. `gpt-4o/openai/ptb` - Helicone's OpenAI key
+3. `claude-sonnet-4/anthropic/byok` - Your Anthropic key
+4. `claude-sonnet-4/anthropic/ptb` - Helicone's Anthropic key
+
+## Monitoring Fallback Usage
+
+Track which fallbacks are being used:
+
+### Response Headers
+
+```typescript
+const response = await client.chat.completions.create({
+  model: "gpt-4o,claude-sonnet-4,gemini-2.0-flash",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+
+// Check the model that responded
+console.log("Model:", response.model);
+
+// In raw HTTP responses, check the Helicone-Fallback-Index header
+// 0 = first model, 1 = first fallback, 2 = second fallback, etc.
+```
+
+### Helicone Dashboard
+
+View fallback analytics in the dashboard:
+
+- **Requests page** - See which model/provider handled each request
+- **Attempt details** - View all attempts and failure reasons
+- **Analytics** - Track fallback usage over time
+
+Navigate to [helicone.ai/requests](https://helicone.ai/requests) to see:
+- Which attempts succeeded/failed
+- Error messages from failed attempts
+- Latency for each attempt
+
+## Error Handling
+
+Handle scenarios where all fallbacks fail:
+
+```typescript
+try {
+  const response = await client.chat.completions.create({
+    model: "gpt-4o,claude-sonnet-4,gemini-2.0-flash",
+    messages: [{ role: "user", content: "Hello!" }],
+  });
+} catch (error) {
+  // All fallbacks exhausted
+  console.error("All providers failed:", error.message);
+  
+  // Check error details for specific failures
+  if (error.response?.data?.details) {
+    error.response.data.details.forEach(attempt => {
+      console.error(`${attempt.source}: ${attempt.message}`);
+    });
+  }
+  
+  // Implement your fallback logic
+  // - Return cached response
+  // - Show user a message
+  // - Use a default response
+}
+```
+
+Error response structure:
+
+```json
+{
+  "error": {
+    "code": "all_attempts_failed",
+    "message": "All attempts failed",
+    "details": [
+      {
+        "source": "gpt-4o/openai/byok",
+        "type": "request_failed",
+        "message": "Rate limited",
+        "statusCode": 429
+      },
+      {
+        "source": "claude-sonnet-4/anthropic/ptb",
+        "type": "insufficient_credit_limit",
+        "message": "Insufficient credits",
+        "statusCode": 429
+      },
+      {
+        "source": "gemini-2.0-flash/google-ai-studio/ptb",
+        "type": "request_failed",
+        "message": "Service unavailable",
+        "statusCode": 503
+      }
+    ]
+  }
+}
+```
+
+## Fallback Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Configure Fallbacks" icon="shield-halved">
+    Production apps should have at least 2-3 fallback options:
+    
+    ```typescript
+    // Good: Multiple fallbacks
+    model: "gpt-4o,claude-sonnet-4,gemini-2.0-flash"
+    
+    // Risky: No fallback
+    model: "gpt-4o"
+    ```
+  </Accordion>
+  
+  <Accordion title="Use Different Providers" icon="building">
+    Don't use multiple models from the same provider for fallbacks:
+    
+    ```typescript
+    // Good: Different providers
+    model: "gpt-4o,claude-sonnet-4,gemini-2.0-flash"
+    
+    // Less effective: Same provider
+    model: "gpt-4o,gpt-4o-mini,gpt-3.5-turbo"
+    ```
+    
+    If OpenAI is down, all OpenAI models will fail.
+  </Accordion>
+  
+  <Accordion title="Test Fallback Chains" icon="flask">
+    Regularly test that your fallbacks work:
+    
+    ```typescript
+    // Temporarily exclude primary to test fallback
+    model: "gpt-4o,!openai,claude-sonnet-4"
+    ```
+  </Accordion>
+  
+  <Accordion title="Monitor Fallback Metrics" icon="chart-line">
+    Track fallback usage to identify issues:
+    
+    - High fallback rate → primary provider issues
+    - Specific provider always failing → check API keys
+    - All fallbacks failing → insufficient credits or config issue
+  </Accordion>
+  
+  <Accordion title="Balance Cost and Reliability" icon="scale-balanced">
+    Order models by priority:
+    
+    ```typescript
+    // Cost-optimized with reliability
+    model: "gpt-4o-mini,gpt-4o,claude-sonnet-4,gemini-2.0-flash"
+    
+    // Reliability-first with cost fallback
+    model: "gpt-4o,claude-sonnet-4,gpt-4o-mini,gemini-2.0-flash"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Scenarios
+
+### Provider-Specific Configurations
+
+Different providers may need different request formats:
+
+```typescript
+const response = await client.chat.completions.create(
+  {
+    model: "gpt-4o",
+    messages: [{ role: "user", content: "Hello!" }],
+    // OpenAI-specific parameters
+    temperature: 0.7,
+    max_tokens: 100,
+  },
+  {
+    headers: {
+      // Gateway auto-converts for Anthropic if it's used as fallback
+      "Helicone-Gateway-Body-Mapping": "OPENAI",
+    },
+  }
+);
+```
+
+The gateway automatically handles format conversions between providers.
+
+### Streaming with Fallbacks
+
+Fallbacks work with streaming responses:
+
+```typescript
+const stream = await client.chat.completions.create({
+  model: "gpt-4o,claude-sonnet-4,gemini-2.0-flash",
+  messages: [{ role: "user", content: "Write a story" }],
+  stream: true,
+});
+
+for await (const chunk of stream) {
+  const content = chunk.choices[0]?.delta?.content || "";
+  process.stdout.write(content);
+}
+```
+
+### Custom Error Codes
+
+Trigger fallbacks on specific error conditions:
+
+```typescript
+const fallbacks = [
+  {
+    "target-url": "https://api.openai.com/v1",
+    "headers": { "Authorization": "Bearer sk-..." },
+    // Fall back on rate limits and server errors only
+    "onCodes": [429, { "from": 500, "to": 599 }]
+  },
+  {
+    "target-url": "https://api.anthropic.com/v1",
+    "headers": { "x-api-key": "sk-ant-..." },
+    // Don't fall back from Claude (always return its response)
+    "onCodes": []
+  }
+];
+```
+
+## Combining with Other Features
+
+### Fallbacks + Caching
+
+```typescript
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+  defaultHeaders: {
+    // Enable caching to reduce fallback frequency
+    "Helicone-Cache-Enabled": "true",
+  },
+});
+
+const response = await client.chat.completions.create({
+  model: "gpt-4o,claude-sonnet-4",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+Cached responses bypass provider calls entirely, eliminating the need for fallbacks.
+
+### Fallbacks + Rate Limiting
+
+```typescript
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+  defaultHeaders: {
+    // Limit to 100 requests per minute per user
+    "Helicone-RateLimit-Policy": "100;w=60;s=user",
+  },
+});
+
+const response = await client.chat.completions.create({
+  model: "gpt-4o,claude-sonnet-4",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+<Warning>
+Helicone rate limits cause immediate failure without fallback to prevent unexpected costs.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Intelligent Routing" icon="route" href="/gateway/routing">
+    Learn more about provider selection and routing
+  </Card>
+  <Card title="Request Caching" icon="database" href="/gateway/caching">
+    Cache responses to reduce provider calls
+  </Card>
+  <Card title="Rate Limiting" icon="gauge-high" href="/gateway/rate-limiting">
+    Control request rates across your application
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/gateway/quickstart">
+    Get started with the AI Gateway
+  </Card>
+</CardGroup>

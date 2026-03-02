@@ -1,0 +1,122 @@
+---
+title: "Integrations Overview"
+sidebarTitle: "Overview"
+description: "Connect Helicone with your favorite AI providers and frameworks"
+icon: "plug"
+---
+
+## Introduction
+
+Helicone provides seamless integration with leading AI providers and frameworks, offering comprehensive observability and monitoring for your AI applications. Whether you're using OpenAI, Anthropic, LangChain, or other popular tools, Helicone has you covered.
+
+## AI Gateway vs Legacy Integrations
+
+### AI Gateway (Recommended)
+
+The Helicone AI Gateway is the modern, unified approach to integrate with 100+ AI models:
+
+- **Single API** for all providers
+- **Automatic fallbacks** if a provider goes down
+- **Intelligent routing** based on cost, latency, or custom rules
+- **Zero markup** on model costs
+- **Unified observability** across all providers
+
+<Card title="Get Started with AI Gateway" icon="rocket" href="/gateway/overview">
+  Start using the unified API for 100+ models in 2 minutes
+</Card>
+
+### Legacy Provider Integrations
+
+For existing applications built with provider-specific SDKs, Helicone offers proxy-based integrations:
+
+- Simple baseURL change to route through Helicone
+- Keep using your existing SDK code
+- Provider-specific endpoints (e.g., `oai.helicone.ai` for OpenAI)
+
+<Warning>
+  Legacy integrations are maintained but not actively developed. For new projects, use the AI Gateway.
+</Warning>
+
+## Supported Integrations
+
+### AI Providers
+
+<CardGroup cols={2}>
+  <Card title="OpenAI" icon="code" href="/integrations/openai">
+    Integrate with OpenAI's GPT models including GPT-4, GPT-3.5, and more
+  </Card>
+  <Card title="Anthropic" icon="message-bot" href="/integrations/anthropic">
+    Monitor Claude models with comprehensive observability
+  </Card>
+</CardGroup>
+
+### Frameworks
+
+<CardGroup cols={2}>
+  <Card title="LangChain" icon="link" href="/integrations/langchain">
+    Track LangChain chains, agents, and tool usage
+  </Card>
+  <Card title="Vercel AI SDK" icon="sparkles" href="/integrations/vercel-ai-sdk">
+    Build AI-powered applications with full observability
+  </Card>
+  <Card title="LlamaIndex" icon="database" href="/integrations/llamaindex">
+    Monitor RAG applications and vector store interactions
+  </Card>
+</CardGroup>
+
+## Integration Features
+
+All Helicone integrations provide:
+
+### Observability
+- **Request logging** - Track all API calls with full request/response data
+- **Cost tracking** - Monitor spending across providers and models
+- **Latency monitoring** - Measure response times and performance
+- **Error tracking** - Capture and debug failed requests
+
+### Advanced Features
+- **Custom properties** - Tag requests with metadata for filtering
+- **Sessions** - Group related requests into conversations
+- **User tracking** - Associate requests with end users
+- **Caching** - Reduce costs and latency with semantic caching
+- **Rate limiting** - Control API usage per user or endpoint
+
+### Analytics
+- **Usage dashboards** - Visualize API usage patterns
+- **Cost analytics** - Track spending trends and optimize costs
+- **Performance metrics** - Monitor latency, throughput, and success rates
+- **User analytics** - Understand user behavior and engagement
+
+## Getting Started
+
+<Steps>
+  <Step title="Sign up for Helicone">
+    Create a free account at [helicone.ai](https://helicone.ai/signup)
+  </Step>
+  <Step title="Generate API key">
+    Get your API key from the [developer settings](https://us.helicone.ai/settings/api-keys)
+  </Step>
+  <Step title="Choose integration method">
+    Select your provider or framework from the integration guides
+  </Step>
+  <Step title="Start monitoring">
+    View your requests in the [Helicone dashboard](https://us.helicone.ai/dashboard)
+  </Step>
+</Steps>
+
+## Need Help?
+
+<CardGroup cols={2}>
+  <Card title="Documentation" icon="book" href="/quickstart">
+    Read the full documentation and guides
+  </Card>
+  <Card title="Discord Community" icon="discord" href="https://discord.com/invite/zsSTcH2qhG">
+    Join our community for support and discussions
+  </Card>
+  <Card title="GitHub" icon="github" href="https://github.com/Helicone/helicone">
+    Report issues and contribute to the project
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/gateway/chat-completions">
+    Explore the complete API documentation
+  </Card>
+</CardGroup>

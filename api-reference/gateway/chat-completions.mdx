@@ -1,0 +1,255 @@
+---
+title: 'Chat Completions'
+api: 'POST https://oai.helicone.ai/v1/chat/completions'
+description: 'Route requests through Helicone AI Gateway to track, monitor, and analyze your LLM API calls'
+---
+
+## Overview
+
+The Helicone AI Gateway proxies requests to OpenAI-compatible endpoints while automatically logging requests, responses, and metadata for analysis.
+
+## Authentication
+
+Include your Helicone API key in the request headers:
+
+<ParamField header="Helicone-Auth" type="string" required>
+  Your Helicone API key. Format: `Bearer YOUR_API_KEY`
+</ParamField>
+
+<ParamField header="Authorization" type="string" required>
+  Your OpenAI API key. Format: `Bearer YOUR_OPENAI_KEY`
+</ParamField>
+
+## Request Headers
+
+<ParamField header="Helicone-Property-*" type="string">
+  Custom properties to attach to the request. Replace `*` with your property name.
+  Example: `Helicone-Property-Environment: production`
+</ParamField>
+
+<ParamField header="Helicone-User-Id" type="string">
+  User identifier for tracking requests by user
+</ParamField>
+
+<ParamField header="Helicone-Session-Id" type="string">
+  Session identifier for grouping related requests
+</ParamField>
+
+<ParamField header="Helicone-Session-Name" type="string">
+  Human-readable session name
+</ParamField>
+
+<ParamField header="Helicone-Prompt-Id" type="string">
+  Prompt template identifier for versioning
+</ParamField>
+
+<ParamField header="Helicone-Cache-Enabled" type="boolean">
+  Enable caching for this request
+</ParamField>
+
+<ParamField header="Helicone-Retry-Enabled" type="boolean">
+  Enable automatic retries on failure
+</ParamField>
+
+## Request Body
+
+<ParamField body="model" type="string" required>
+  The model to use for completion (e.g., `gpt-4`, `gpt-3.5-turbo`)
+</ParamField>
+
+<ParamField body="messages" type="array" required>
+  Array of message objects in the conversation
+  
+  <Expandable title="message object">
+    <ResponseField name="role" type="string" required>
+      The role of the message author: `system`, `user`, or `assistant`
+    </ResponseField>
+    <ResponseField name="content" type="string" required>
+      The content of the message
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="temperature" type="number" default="1">
+  Sampling temperature between 0 and 2
+</ParamField>
+
+<ParamField body="max_tokens" type="number">
+  Maximum number of tokens to generate
+</ParamField>
+
+<ParamField body="stream" type="boolean" default="false">
+  Whether to stream the response
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">
+  Unique identifier for the completion
+</ResponseField>
+
+<ResponseField name="object" type="string">
+  Object type, always `chat.completion`
+</ResponseField>
+
+<ResponseField name="created" type="number">
+  Unix timestamp of when the completion was created
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  The model used for completion
+</ResponseField>
+
+<ResponseField name="choices" type="array">
+  Array of completion choices
+  
+  <Expandable title="choice object">
+    <ResponseField name="index" type="number">
+      The index of this choice
+    </ResponseField>
+    <ResponseField name="message" type="object">
+      The generated message
+      <Expandable title="message properties">
+        <ResponseField name="role" type="string">
+          Always `assistant`
+        </ResponseField>
+        <ResponseField name="content" type="string">
+          The generated response text
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="finish_reason" type="string">
+      Reason completion stopped: `stop`, `length`, or `content_filter`
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="usage" type="object">
+  Token usage statistics
+  
+  <Expandable title="usage properties">
+    <ResponseField name="prompt_tokens" type="number">
+      Number of tokens in the prompt
+    </ResponseField>
+    <ResponseField name="completion_tokens" type="number">
+      Number of tokens in the completion
+    </ResponseField>
+    <ResponseField name="total_tokens" type="number">
+      Total tokens used
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://oai.helicone.ai/v1/chat/completions \
+  --header 'Authorization: Bearer YOUR_OPENAI_KEY' \
+  --header 'Helicone-Auth: Bearer YOUR_HELICONE_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "model": "gpt-4",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello, how are you?"
+      }
+    ],
+    "temperature": 0.7
+  }'
+```
+
+```python Python
+import openai
+
+openai.api_base = "https://oai.helicone.ai/v1"
+openai.api_key = "YOUR_OPENAI_KEY"
+
+response = openai.ChatCompletion.create(
+    model="gpt-4",
+    messages=[
+        {"role": "user", "content": "Hello, how are you?"}
+    ],
+    temperature=0.7,
+    headers={
+        "Helicone-Auth": "Bearer YOUR_HELICONE_KEY"
+    }
+)
+```
+
+```javascript JavaScript
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: 'YOUR_OPENAI_KEY',
+  baseURL: 'https://oai.helicone.ai/v1',
+  defaultHeaders: {
+    'Helicone-Auth': 'Bearer YOUR_HELICONE_KEY',
+  },
+});
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4',
+  messages: [{ role: 'user', content: 'Hello, how are you?' }],
+  temperature: 0.7,
+});
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200 Success
+{
+  "id": "chatcmpl-123",
+  "object": "chat.completion",
+  "created": 1677652288,
+  "model": "gpt-4",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello! I'm doing well, thank you for asking. How can I help you today?"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 13,
+    "completion_tokens": 20,
+    "total_tokens": 33
+  }
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": {
+    "message": "Invalid Helicone API key",
+    "type": "authentication_error"
+  }
+}
+```
+
+```json 500 Server Error
+{
+  "error": {
+    "message": "Internal server error",
+    "type": "server_error"
+  }
+}
+```
+
+</ResponseExample>
+
+## Error Codes
+
+| Code | Description |
+|------|-------------|
+| 400  | Bad Request - Invalid parameters |
+| 401  | Unauthorized - Invalid API key |
+| 429  | Rate Limit Exceeded |
+| 500  | Server Error |
+| 503  | Service Unavailable |

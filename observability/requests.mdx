@@ -1,0 +1,632 @@
+---
+title: "Requests"
+sidebarTitle: "Requests"
+description: "View and analyze individual LLM requests with detailed request/response data, timing metrics, and token usage"
+"twitter:title": "Requests - Helicone OSS LLM Observability"
+---
+
+import QuestionsSection from "/snippets/questions-section.mdx";
+
+## Overview
+
+Every LLM API call made through Helicone is captured as a request. Requests include complete request/response data, timing metrics, token usage, costs, and any custom properties you've attached. The requests view gives you detailed visibility into every interaction with your LLM providers.
+
+<Frame caption="Request detail view showing complete request and response data">
+  <img src="/images/placeholder-request-detail.png" alt="Request detail view" />
+</Frame>
+
+## What's Captured
+
+Helicone automatically captures comprehensive data for every request:
+
+### Request Data
+- **Model**: Which LLM model was used (e.g., gpt-4o, claude-3-opus)
+- **Messages**: Complete conversation history sent to the model
+- **Parameters**: Temperature, max_tokens, top_p, and other configuration
+- **Provider**: Which LLM provider handled the request (OpenAI, Anthropic, etc.)
+- **Headers**: Custom headers including Helicone properties
+
+### Response Data
+- **Completion**: The full text response from the model
+- **Finish Reason**: Why the model stopped (completed, length limit, etc.)
+- **Function Calls**: Any tool/function calls made by the model
+- **Response Headers**: Provider-specific headers and metadata
+
+### Metrics
+- **Latency**: Total request duration from start to finish
+- **Time to First Token**: How long until the first response token (for streaming)
+- **Tokens**: Input tokens, output tokens, and total token count
+- **Cost**: Precise cost calculation based on model pricing
+- **Status**: HTTP status code and success/failure indication
+
+### Metadata
+- **Timestamp**: When the request was made
+- **User**: User ID if provided via custom properties
+- **Session**: Session ID if part of a session
+- **Request ID**: Unique identifier for the request
+- **Custom Properties**: Any custom metadata you've attached
+
+## Viewing Requests
+
+### In the Dashboard
+
+1. Navigate to the **Requests** page in the Helicone dashboard
+2. Browse the list of requests in reverse chronological order
+3. Use filters to narrow down to specific requests
+4. Click any request to view full details
+
+### Filtering Requests
+
+Use the powerful filtering interface to find specific requests:
+
+```typescript
+// Filter by custom property
+Property: "environment" equals "production"
+
+// Filter by model
+Model: contains "gpt-4"
+
+// Filter by time range
+Created: last 7 days
+
+// Filter by user
+User ID: equals "user_123"
+
+// Combine multiple filters
+(Property: "environment" = "production") AND (Model: contains "gpt-4")
+```
+
+### Sorting Requests
+
+Sort by any metric to identify patterns:
+- **Newest first** (default)
+- **Highest cost**: Find expensive requests
+- **Highest latency**: Identify slow requests
+- **Most tokens**: Find large requests
+
+## Querying Requests via API
+
+Use the Helicone API to programmatically access your request data:
+
+<CodeGroup>
+```typescript Node.js
+const response = await fetch("https://api.helicone.ai/v1/request/query", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    filter: {
+      request_response_rmt: {
+        request_created_at: {
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+        },
+      },
+    },
+    offset: 0,
+    limit: 100,
+    sort: {
+      created_at: "desc",
+    },
+  }),
+});
+
+const { data } = await response.json();
+console.log(`Found ${data.length} requests`);
+```
+
+```python Python
+import requests
+import os
+from datetime import datetime, timedelta
+
+response = requests.post(
+    "https://api.helicone.ai/v1/request/query",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('HELICONE_API_KEY')}",
+        "Content-Type": "application/json",
+    },
+    json={
+        "filter": {
+            "request_response_rmt": {
+                "request_created_at": {
+                    "gte": (datetime.now() - timedelta(days=7)).isoformat(),
+                },
+            },
+        },
+        "offset": 0,
+        "limit": 100,
+        "sort": {
+            "created_at": "desc",
+        },
+    },
+)
+
+data = response.json()["data"]
+print(f"Found {len(data)} requests")
+```
+
+```bash cURL
+curl -X POST https://api.helicone.ai/v1/request/query \
+  -H "Authorization: Bearer $HELICONE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filter": {
+      "request_response_rmt": {
+        "request_created_at": {
+          "gte": "2024-01-01T00:00:00Z"
+        }
+      }
+    },
+    "offset": 0,
+    "limit": 100,
+    "sort": {
+      "created_at": "desc"
+    }
+  }'
+```
+</CodeGroup>
+
+### Query by Request ID
+
+Retrieve a specific request by its ID:
+
+<CodeGroup>
+```typescript Node.js
+const response = await fetch(
+  `https://api.helicone.ai/v1/request/${requestId}?includeBody=true`,
+  {
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    },
+  }
+);
+
+const { data } = await response.json();
+console.log("Request:", data);
+```
+
+```python Python
+response = requests.get(
+    f"https://api.helicone.ai/v1/request/{request_id}",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('HELICONE_API_KEY')}",
+    },
+    params={"includeBody": "true"},
+)
+
+data = response.json()["data"]
+print("Request:", data)
+```
+</CodeGroup>
+
+## Filtering Examples
+
+### Filter by Custom Property
+
+```typescript
+{
+  filter: {
+    request_response_rmt: {
+      properties: {
+        "environment": {
+          equals: "production"
+        }
+      }
+    }
+  }
+}
+```
+
+### Filter by Model
+
+```typescript
+{
+  filter: {
+    request_response_rmt: {
+      model: {
+        contains: "gpt-4"
+      }
+    }
+  }
+}
+```
+
+### Filter by Date Range
+
+```typescript
+{
+  filter: {
+    left: {
+      request_response_rmt: {
+        request_created_at: {
+          gte: "2024-01-01T00:00:00Z"
+        }
+      }
+    },
+    operator: "and",
+    right: {
+      request_response_rmt: {
+        request_created_at: {
+          lte: "2024-01-31T23:59:59Z"
+        }
+      }
+    }
+  }
+}
+```
+
+### Filter by Status
+
+```typescript
+// Only successful requests
+{
+  filter: {
+    request_response_rmt: {
+      status: {
+        equals: 200
+      }
+    }
+  }
+}
+
+// Only failed requests
+{
+  filter: {
+    request_response_rmt: {
+      status: {
+        gte: 400
+      }
+    }
+  }
+}
+```
+
+### Complex Filters
+
+Combine multiple conditions:
+
+```typescript
+{
+  filter: {
+    left: {
+      left: {
+        request_response_rmt: {
+          properties: {
+            "environment": {
+              equals: "production"
+            }
+          }
+        }
+      },
+      operator: "and",
+      right: {
+        request_response_rmt: {
+          model: {
+            contains: "gpt-4"
+          }
+        }
+      }
+    },
+    operator: "and",
+    right: {
+      request_response_rmt: {
+        cost: {
+          gte: 0.01
+        }
+      }
+    }
+  }
+}
+```
+
+## Adding Metadata to Requests
+
+### Add Properties Inline
+
+Add custom properties when making requests:
+
+<CodeGroup>
+```typescript Node.js
+import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+const response = await client.chat.completions.create(
+  {
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Hello!" }],
+  },
+  {
+    headers: {
+      "Helicone-Property-Environment": "production",
+      "Helicone-Property-User-Id": "user_123",
+      "Helicone-Property-Conversation-Id": "conv_456",
+    },
+  }
+);
+```
+
+```python Python
+from openai import OpenAI
+import os
+
+client = OpenAI(
+    api_key=os.environ.get("OPENAI_API_KEY"),
+    base_url="https://oai.helicone.ai/v1",
+    default_headers={
+        "Helicone-Auth": f"Bearer {os.environ.get('HELICONE_API_KEY')}",
+    },
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Hello!"}],
+    extra_headers={
+        "Helicone-Property-Environment": "production",
+        "Helicone-Property-User-Id": "user_123",
+        "Helicone-Property-Conversation-Id": "conv_456",
+    },
+)
+```
+</CodeGroup>
+
+### Add Properties After Request
+
+Add or update properties on existing requests:
+
+```typescript
+const response = await fetch(
+  `https://api.helicone.ai/v1/request/${requestId}/property`,
+  {
+    method: "PUT",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      key: "quality_score",
+      value: "high",
+    }),
+  }
+);
+```
+
+## Feedback and Scores
+
+### Add Thumbs Up/Down Feedback
+
+```typescript
+const response = await fetch(
+  `https://api.helicone.ai/v1/request/${requestId}/feedback`,
+  {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      rating: true, // true for thumbs up, false for thumbs down
+    }),
+  }
+);
+```
+
+### Add Custom Scores
+
+Add numeric or categorical scores to requests:
+
+```typescript
+const response = await fetch(
+  `https://api.helicone.ai/v1/request/${requestId}/score`,
+  {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      scores: {
+        accuracy: 0.95,
+        relevance: 0.87,
+        helpfulness: 0.92,
+      },
+    }),
+  }
+);
+```
+
+## Best Practices
+
+<AccordionGroup>
+<Accordion title="Add User Context">
+Always include user identifiers in requests to enable per-user analytics:
+
+```typescript
+headers: {
+  "Helicone-Property-User-Id": userId,
+  "Helicone-User-Id": userId, // Also sets the user field
+}
+```
+</Accordion>
+
+<Accordion title="Tag Environments">
+Differentiate between production, staging, and development:
+
+```typescript
+headers: {
+  "Helicone-Property-Environment": process.env.NODE_ENV,
+}
+```
+</Accordion>
+
+<Accordion title="Track Features">
+Label requests by feature or workflow:
+
+```typescript
+headers: {
+  "Helicone-Property-Feature": "chat",
+  "Helicone-Property-Workflow": "customer_support",
+}
+```
+</Accordion>
+
+<Accordion title="Monitor Costs">
+Regularly review requests sorted by cost to identify expensive patterns:
+
+```typescript
+{
+  sort: {
+    cost: "desc"
+  },
+  limit: 100
+}
+```
+</Accordion>
+
+<Accordion title="Handle Failures">
+Filter by status code to investigate errors:
+
+```typescript
+{
+  filter: {
+    request_response_rmt: {
+      status: {
+        gte: 400
+      }
+    }
+  }
+}
+```
+</Accordion>
+</AccordionGroup>
+
+## Common Use Cases
+
+<Tabs>
+<Tab title="Debugging Errors">
+**Scenario**: Users report errors in your application.
+
+**Solution**:
+1. Filter requests by status >= 400
+2. Group by error message to identify common failures
+3. Check request parameters and user properties
+4. Review recent changes that correlate with error spikes
+
+```typescript
+{
+  filter: {
+    left: {
+      request_response_rmt: {
+        status: { gte: 400 }
+      }
+    },
+    operator: "and",
+    right: {
+      request_response_rmt: {
+        request_created_at: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+        }
+      }
+    }
+  }
+}
+```
+</Tab>
+
+<Tab title="Cost Analysis">
+**Scenario**: Identify which requests are most expensive.
+
+**Solution**:
+1. Sort requests by cost descending
+2. Look for patterns in expensive requests
+3. Check if certain users or features drive costs
+4. Consider model optimization or caching
+
+```typescript
+{
+  sort: { cost: "desc" },
+  limit: 100,
+  filter: {
+    request_response_rmt: {
+      cost: { gte: 0.01 }
+    }
+  }
+}
+```
+</Tab>
+
+<Tab title="Performance Optimization">
+**Scenario**: Find and optimize slow requests.
+
+**Solution**:
+1. Sort by latency to find slowest requests
+2. Analyze token counts (more tokens = slower)
+3. Check time-to-first-token for streaming
+4. Identify patterns in slow requests
+
+```typescript
+{
+  sort: { latency: "desc" },
+  limit: 100,
+  filter: {
+    request_response_rmt: {
+      latency_ms: { gte: 5000 } // > 5 seconds
+    }
+  }
+}
+```
+</Tab>
+
+<Tab title="User Behavior">
+**Scenario**: Understand how specific users interact with your AI.
+
+**Solution**:
+1. Filter by user ID
+2. Review chronological request history
+3. Analyze request patterns and frequency
+4. Calculate per-user costs and usage
+
+```typescript
+{
+  filter: {
+    request_response_rmt: {
+      properties: {
+        "user_id": { equals: "user_123" }
+      }
+    }
+  },
+  sort: { created_at: "desc" }
+}
+```
+</Tab>
+</Tabs>
+
+## Related Features
+
+<CardGroup cols={2}>
+<Card title="Sessions" icon="diagram-project" href="/observability/sessions">
+Group related requests into sessions for multi-turn tracking
+</Card>
+
+<Card title="Custom Properties" icon="tag" href="/observability/custom-properties">
+Learn more about adding custom metadata
+</Card>
+
+<Card title="User Metrics" icon="users" href="/observability/user-metrics">
+Analyze aggregated user behavior and costs
+</Card>
+
+<Card title="Cost Tracking" icon="dollar-sign" href="/observability/cost-tracking">
+Monitor and optimize your LLM costs
+</Card>
+</CardGroup>
+
+<QuestionsSection />

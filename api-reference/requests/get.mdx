@@ -1,0 +1,161 @@
+---
+title: 'Get Request'
+api: 'GET https://api.helicone.ai/v1/request/{requestId}'
+description: 'Retrieve a single request by ID'
+---
+
+## Overview
+
+Get detailed information about a specific request including full request and response bodies.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Your Helicone API key. Format: `Bearer YOUR_API_KEY`
+</ParamField>
+
+## Path Parameters
+
+<ParamField path="requestId" type="string" required>
+  The unique identifier of the request
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="includeBody" type="boolean" default="false">
+  Include full request and response bodies in the response
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="object">
+  Request object
+  
+  <Expandable title="request properties">
+    <ResponseField name="request_id" type="string">
+      Unique request identifier
+    </ResponseField>
+    <ResponseField name="model" type="string">
+      Model used for the request
+    </ResponseField>
+    <ResponseField name="provider" type="string">
+      Provider (e.g., OPENAI, ANTHROPIC)
+    </ResponseField>
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    <ResponseField name="user_id" type="string">
+      User identifier
+    </ResponseField>
+    <ResponseField name="prompt_tokens" type="number">
+      Number of input tokens
+    </ResponseField>
+    <ResponseField name="completion_tokens" type="number">
+      Number of output tokens
+    </ResponseField>
+    <ResponseField name="cost" type="number">
+      Request cost in USD
+    </ResponseField>
+    <ResponseField name="latency" type="number">
+      Response latency in milliseconds
+    </ResponseField>
+    <ResponseField name="status" type="number">
+      HTTP status code
+    </ResponseField>
+    <ResponseField name="request_body" type="object">
+      Full request body (when includeBody=true)
+    </ResponseField>
+    <ResponseField name="response_body" type="object">
+      Full response body (when includeBody=true)
+    </ResponseField>
+    <ResponseField name="properties" type="object">
+      Custom properties
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if request failed
+</ResponseField>
+
+<RequestExample>
+
+```bash cURL
+curl --request GET \
+  --url 'https://api.helicone.ai/v1/request/req_abc123?includeBody=true' \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+```
+
+```python Python
+import requests
+
+url = "https://api.helicone.ai/v1/request/req_abc123"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY"
+}
+params = {
+    "includeBody": True
+}
+
+response = requests.get(url, headers=headers, params=params)
+data = response.json()
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.helicone.ai/v1/request/req_abc123?includeBody=true',
+  {
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+    },
+  }
+);
+
+const data = await response.json();
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200 Success
+{
+  "data": {
+    "request_id": "req_abc123",
+    "model": "gpt-4",
+    "provider": "OPENAI",
+    "created_at": "2024-03-02T10:30:00Z",
+    "user_id": "user_456",
+    "prompt_tokens": 150,
+    "completion_tokens": 75,
+    "total_tokens": 225,
+    "cost": 0.0045,
+    "latency": 1250,
+    "status": 200,
+    "request_body": {
+      "model": "gpt-4",
+      "messages": [
+        {"role": "user", "content": "Hello"}
+      ]
+    },
+    "response_body": {
+      "choices": [
+        {"message": {"content": "Hi there!"}}
+      ]
+    },
+    "properties": {
+      "environment": "production"
+    }
+  },
+  "error": null
+}
+```
+
+```json 500 Error
+{
+  "data": null,
+  "error": "Request not found"
+}
+```
+
+</ResponseExample>

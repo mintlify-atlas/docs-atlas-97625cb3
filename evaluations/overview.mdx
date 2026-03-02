@@ -1,0 +1,198 @@
+---
+title: "Evaluations Overview"
+description: "Comprehensive evaluation system for tracking quality, running experiments, and measuring AI performance"
+---
+
+## What are Evaluations?
+
+Helicone's evaluation system provides a comprehensive framework for measuring and improving the quality of your AI applications. The evaluation suite includes:
+
+- **Scores**: Track quality metrics for individual requests
+- **Datasets**: Organize test cases and input collections
+- **Experiments**: Compare prompts, models, and configurations
+- **Evaluators**: Automated scoring using LLM-as-a-Judge or custom code
+
+<CardGroup cols={2}>
+  <Card title="Scores" icon="star" href="/evaluations/scores">
+    Add and track quality scores for your requests
+  </Card>
+  <Card title="Datasets" icon="database" href="/evaluations/datasets">
+    Create and manage test datasets
+  </Card>
+  <Card title="Experiments" icon="flask" href="/evaluations/experiments">
+    Run A/B tests and compare variations
+  </Card>
+  <Card title="Evaluators" icon="gavel" href="/evaluations/evaluators">
+    Automated scoring with LLM judges
+  </Card>
+</CardGroup>
+
+## Key Concepts
+
+### Scores
+
+Scores are numerical or boolean values that measure the quality of a request-response pair. You can:
+
+- Add scores manually through the API
+- Use automated evaluators to score requests
+- Track scores over time to identify trends
+- Filter and analyze requests by score values
+
+### Datasets
+
+Datasets are collections of inputs used for testing and experimentation:
+
+- Create datasets from existing requests
+- Build custom datasets with specific test cases
+- Associate datasets with prompt versions
+- Use datasets across multiple experiments
+
+### Experiments
+
+Experiments allow you to compare different configurations:
+
+- Test multiple prompt versions side-by-side
+- Compare different models on the same inputs
+- Track scores across experiment runs
+- Visualize performance differences
+
+### Evaluators
+
+Evaluators automatically score requests based on criteria:
+
+- **LLM-as-a-Judge**: Use AI to evaluate responses
+- **Python Code**: Write custom scoring logic
+- **LastMile Integration**: Advanced evaluation workflows
+- Apply evaluators to experiments or online traffic
+
+## Common Workflows
+
+### 1. Basic Evaluation Workflow
+
+<Steps>
+  <Step title="Create an Evaluator">
+    Define your scoring criteria using LLM-as-a-Judge or custom code.
+  </Step>
+  <Step title="Build a Dataset">
+    Collect test cases that represent your use cases.
+  </Step>
+  <Step title="Run an Experiment">
+    Test prompt variations against your dataset.
+  </Step>
+  <Step title="Analyze Results">
+    Compare scores and identify the best configuration.
+  </Step>
+</Steps>
+
+### 2. Continuous Monitoring
+
+<Steps>
+  <Step title="Add Scores to Production">
+    Use the API to track scores on live requests.
+  </Step>
+  <Step title="Set up Alerts">
+    Monitor score distributions and get notified of issues.
+  </Step>
+  <Step title="Iterate and Improve">
+    Use insights to refine prompts and models.
+  </Step>
+</Steps>
+
+## Getting Started
+
+### Quick Start: Add Your First Score
+
+The simplest way to start with evaluations is to add a score to a request:
+
+```bash
+curl -X POST https://api.helicone.ai/v1/evals/{requestId} \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "accuracy",
+    "score": 0.95
+  }'
+```
+
+### View Scores in Dashboard
+
+Once scores are added, you can:
+
+1. View score distributions in the **Scores** tab
+2. Filter requests by score values
+3. Track score trends over time
+4. Export score data for analysis
+
+## API Reference
+
+### Score Management
+
+- **POST** `/v1/evals/{requestId}` - Add a score to a request
+- **POST** `/v1/evals/query` - Query scores with filters
+- **GET** `/v1/evals/scores` - List all score names
+- **POST** `/v1/evals/score-distributions/query` - Get score distributions
+
+### Experiment Management
+
+- **POST** `/v1/experiment/new-empty` - Create a new experiment
+- **POST** `/v1/experiment/table/new` - Create an experiment table
+- **POST** `/v1/experiment/table/{id}/query` - Get experiment data
+- **POST** `/v1/experiment/table/{id}/row/new` - Add experiment rows
+
+See the [API Reference](/api-reference) for complete documentation.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Consistent Score Names">
+    Standardize score names across your organization:
+    - Use lowercase with underscores: `response_quality`, `accuracy`
+    - Document what each score measures
+    - Avoid duplicate scores with different meanings
+  </Accordion>
+
+  <Accordion title="Start with Small Datasets">
+    When creating datasets:
+    - Begin with 10-20 representative examples
+    - Ensure diversity in your test cases
+    - Expand based on failure patterns
+    - Version your datasets as they evolve
+  </Accordion>
+
+  <Accordion title="Automate Evaluation">
+    Set up automated evaluators to:
+    - Catch regressions early
+    - Maintain consistent quality standards
+    - Reduce manual review time
+    - Scale evaluation across all requests
+  </Accordion>
+
+  <Accordion title="Combine Multiple Metrics">
+    Don't rely on a single score:
+    - Track both automated and human scores
+    - Use multiple evaluators for different aspects
+    - Balance quality, cost, and latency
+    - Create composite scores when needed
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Add Scores" icon="plus" href="/evaluations/scores">
+    Start tracking quality metrics on your requests
+  </Card>
+  <Card title="Create Datasets" icon="table" href="/evaluations/datasets">
+    Build test datasets for experimentation
+  </Card>
+  <Card title="Run Experiments" icon="flask-vial" href="/evaluations/experiments">
+    Compare prompts and models side-by-side
+  </Card>
+  <Card title="Set up Evaluators" icon="robot" href="/evaluations/evaluators">
+    Automate scoring with AI judges
+  </Card>
+</CardGroup>
+
+<Note>
+  **Need help?** Join our [community Discord](https://discord.gg/helicone) or check out the [full documentation](https://docs.helicone.ai).
+</Note>

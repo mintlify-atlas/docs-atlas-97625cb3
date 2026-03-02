@@ -1,0 +1,195 @@
+---
+title: 'Query Sessions'
+api: 'POST https://api.helicone.ai/v1/session/query'
+description: 'Query and filter sessions with advanced search capabilities'
+---
+
+## Overview
+
+Retrieve sessions from your Helicone account. Sessions group related requests together (e.g., a conversation thread).
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Your Helicone API key. Format: `Bearer YOUR_API_KEY`
+</ParamField>
+
+## Request Body
+
+<ParamField body="search" type="string" required>
+  Search query for session names (use empty string for all sessions)
+</ParamField>
+
+<ParamField body="timeFilter" type="object" required>
+  Time range filter
+  
+  <Expandable title="time filter properties">
+    <ResponseField name="startTimeUnixMs" type="number" required>
+      Start time in Unix milliseconds
+    </ResponseField>
+    <ResponseField name="endTimeUnixMs" type="number" required>
+      End time in Unix milliseconds
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="nameEquals" type="string">
+  Filter by exact session name
+</ParamField>
+
+<ParamField body="timezoneDifference" type="number" required>
+  Timezone offset in minutes from UTC
+</ParamField>
+
+<ParamField body="filter" type="object" required>
+  Advanced filter criteria (use `{}` for no filter)
+</ParamField>
+
+<ParamField body="offset" type="number" default="0">
+  Number of sessions to skip for pagination
+</ParamField>
+
+<ParamField body="limit" type="number" default="10">
+  Maximum number of sessions to return
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="array">
+  Array of session objects
+  
+  <Expandable title="session object">
+    <ResponseField name="session_id" type="string">
+      Unique session identifier
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Session name
+    </ResponseField>
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp of first request
+    </ResponseField>
+    <ResponseField name="last_used" type="string">
+      ISO 8601 timestamp of last request
+    </ResponseField>
+    <ResponseField name="total_requests" type="number">
+      Number of requests in session
+    </ResponseField>
+    <ResponseField name="total_cost" type="number">
+      Total cost in USD
+    </ResponseField>
+    <ResponseField name="total_tokens" type="number">
+      Total tokens used
+    </ResponseField>
+    <ResponseField name="prompt_tokens" type="number">
+      Total prompt tokens
+    </ResponseField>
+    <ResponseField name="completion_tokens" type="number">
+      Total completion tokens
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if request failed
+</ResponseField>
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.helicone.ai/v1/session/query \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "search": "",
+    "timeFilter": {
+      "startTimeUnixMs": 1704067200000,
+      "endTimeUnixMs": 1704153600000
+    },
+    "timezoneDifference": 0,
+    "filter": {},
+    "offset": 0,
+    "limit": 10
+  }'
+```
+
+```python Python
+import requests
+import time
+
+url = "https://api.helicone.ai/v1/session/query"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json"
+}
+
+payload = {
+    "search": "",
+    "timeFilter": {
+        "startTimeUnixMs": int(time.time() * 1000) - 86400000,  # Last 24h
+        "endTimeUnixMs": int(time.time() * 1000)
+    },
+    "timezoneDifference": 0,
+    "filter": {},
+    "offset": 0,
+    "limit": 10
+}
+
+response = requests.post(url, json=payload, headers=headers)
+data = response.json()
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.helicone.ai/v1/session/query', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    search: '',
+    timeFilter: {
+      startTimeUnixMs: Date.now() - 86400000, // Last 24h
+      endTimeUnixMs: Date.now(),
+    },
+    timezoneDifference: 0,
+    filter: {},
+    offset: 0,
+    limit: 10,
+  }),
+});
+
+const data = await response.json();
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200 Success
+{
+  "data": [
+    {
+      "session_id": "sess_abc123",
+      "name": "customer-support-chat-456",
+      "created_at": "2024-03-02T10:00:00Z",
+      "last_used": "2024-03-02T10:15:00Z",
+      "total_requests": 8,
+      "total_cost": 0.0234,
+      "total_tokens": 1850,
+      "prompt_tokens": 1200,
+      "completion_tokens": 650
+    }
+  ],
+  "error": null
+}
+```
+
+```json 500 Error
+{
+  "data": null,
+  "error": "Failed to query sessions"
+}
+```
+
+</ResponseExample>

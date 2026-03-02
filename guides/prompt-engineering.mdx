@@ -1,0 +1,502 @@
+---
+title: Prompt Engineering Best Practices
+description: Learn proven techniques to improve LLM output quality, consistency, and reliability
+---
+
+# Prompt Engineering Best Practices
+
+Master the art of prompt engineering to get better results from LLMs. This guide covers proven techniques and patterns for crafting effective prompts.
+
+## Core Principles
+
+### Be Specific and Clear
+
+Vague prompts lead to unpredictable outputs. Be explicit about what you want.
+
+<Tabs>
+  <Tab title="Bad">
+    ```
+    Write about dogs.
+    ```
+  </Tab>
+  <Tab title="Good">
+    ```
+    Write a 3-paragraph article about the benefits of adopting rescue dogs.
+    Include:
+    1. Health benefits for owners
+    2. Cost comparison vs buying from breeders
+    3. Impact on animal welfare
+    
+    Target audience: First-time dog owners
+    Tone: Friendly and informative
+    ```
+  </Tab>
+</Tabs>
+
+### Provide Context
+
+Give the model background information and constraints:
+
+```typescript
+const systemPrompt = `You are a customer support agent for Acme SaaS.
+
+Company info:
+- Product: Project management software
+- Target users: Small businesses (5-50 employees)
+- Key features: Task tracking, team collaboration, time tracking
+- Support hours: Monday-Friday, 9am-5pm EST
+
+Guidelines:
+- Be professional but friendly
+- Offer solutions, not just empathy
+- Escalate technical issues to engineering
+- Never promise features not yet available`;
+```
+
+### Use Examples (Few-Shot Learning)
+
+Show the model what you want with examples:
+
+```
+Extract structured data from customer reviews.
+
+Examples:
+
+Input: "Great product! Fast shipping, but instructions were unclear."
+Output: {
+  "sentiment": "positive",
+  "aspects": {
+    "product_quality": "positive",
+    "shipping": "positive",
+    "instructions": "negative"
+  }
+}
+
+Input: "Terrible experience. Product broke after one week."
+Output: {
+  "sentiment": "negative",
+  "aspects": {
+    "product_quality": "negative",
+    "durability": "negative"
+  }
+}
+
+Now extract from this review:
+"Amazing quality and fast delivery! Would buy again."
+```
+
+## Advanced Techniques
+
+### Chain of Thought Prompting
+
+Ask the model to show its reasoning:
+
+<Tabs>
+  <Tab title="Without CoT">
+    ```
+    Solve: If a train travels 120 km in 2 hours, how long to travel 300 km?
+    
+    Answer: 5 hours
+    ```
+    (May be incorrect)
+  </Tab>
+  <Tab title="With CoT">
+    ```
+    Solve step by step: If a train travels 120 km in 2 hours, how long to travel 300 km?
+    
+    Let's think through this:
+    1. First, find the speed: 120 km ÷ 2 hours = 60 km/h
+    2. Then, calculate time: 300 km ÷ 60 km/h = 5 hours
+    
+    Answer: 5 hours
+    ```
+    (Correct with reasoning)
+  </Tab>
+</Tabs>
+
+### Structured Output Format
+
+Specify exact output format:
+
+```typescript
+const prompt = `Analyze this customer feedback and return ONLY valid JSON:
+
+{
+  "sentiment": "positive" | "neutral" | "negative",
+  "urgency": "low" | "medium" | "high",
+  "category": "bug" | "feature_request" | "question" | "complaint",
+  "summary": "<one sentence summary>",
+  "action_required": boolean
+}
+
+Feedback: "${customerMessage}"`;
+```
+
+### Role Playing
+
+Assign a specific role to the model:
+
+```
+You are a senior software engineer with 15 years of experience in distributed systems.
+
+A junior developer asks: "Should I use microservices for my startup MVP?"
+
+Provide practical advice considering:
+- Team size and experience
+- Time to market
+- Scalability needs
+- Operational complexity
+```
+
+### Constrained Generation
+
+Limit output to specific constraints:
+
+```
+Write a product description with these constraints:
+- Exactly 3 sentences
+- Include the words: "innovative", "reliable", "affordable"
+- Second sentence must start with "Unlike competitors"
+- No superlatives ("best", "greatest", etc.)
+```
+
+## Prompt Patterns
+
+### Classification
+
+```
+Classify the following customer message into ONE category:
+- technical_support
+- billing
+- feature_request
+- complaint
+- praise
+
+Message: "I love the new dashboard! It's so much easier to use."
+
+Category:
+```
+
+### Extraction
+
+```
+Extract all mentioned products and their quantities from this order:
+
+"I'd like to order 3 laptops, 5 mice, and 2 keyboards."
+
+Format as JSON:
+{
+  "products": [
+    {"item": "laptop", "quantity": 3},
+    ...
+  ]
+}
+```
+
+### Summarization
+
+```
+Summarize this article in 3 bullet points:
+- Focus on key findings
+- Include specific numbers/data
+- Maximum 15 words per bullet
+
+[article text]
+```
+
+### Generation with Template
+
+```
+Generate an email using this template:
+
+Subject: [Action Required] [Topic]
+
+Hi [Name],
+
+[Opening sentence acknowledging their situation]
+
+[Main content - 2-3 sentences]
+
+[Call to action]
+
+Best regards,
+[Signature]
+
+Context:
+- Customer: John Doe
+- Issue: Billing question about recent charge
+- Action: Need to verify their account details
+```
+
+## Testing and Iteration
+
+### Use Helicone for Testing
+
+Track prompt performance:
+
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{
+    role: "system",
+    content: systemPrompt,
+  }, {
+    role: "user",
+    content: userMessage,
+  }],
+  headers: {
+    "Helicone-Property-Prompt-Version": "v2.1",
+    "Helicone-Property-Use-Case": "customer-support",
+  },
+});
+
+// Track in Helicone dashboard:
+// - Compare prompt versions
+// - Analyze success rates
+// - Monitor token usage
+```
+
+### A/B Test Prompts
+
+Compare different prompt versions:
+
+```typescript
+const promptVersions = {
+  v1: "Summarize this text concisely:",
+  v2: "Provide a brief 2-sentence summary:",
+  v3: "Extract the main point in one sentence:",
+};
+
+const version = getRandomVersion(); // A/B test
+
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{
+    role: "user",
+    content: `${promptVersions[version]} ${text}`,
+  }],
+  headers: {
+    "Helicone-Property-Prompt-Version": version,
+  },
+});
+
+// Analyze results in Helicone:
+// - Which version has better feedback?
+// - Which uses fewer tokens?
+// - Which is faster?
+```
+
+## Common Pitfalls
+
+<AccordionGroup>
+  <Accordion title="Too Vague" icon="question">
+    **Problem:**
+    ```
+    "Write something good about AI."
+    ```
+    
+    **Solution:**
+    ```
+    "Write a 150-word blog introduction about how AI is transforming healthcare.
+    Target audience: Hospital administrators.
+    Include one specific statistic.
+    Tone: Professional and optimistic."
+    ```
+  </Accordion>
+  
+  <Accordion title="Assuming Knowledge" icon="brain">
+    **Problem:**
+    ```
+    "Fix the CORS error."
+    ```
+    
+    **Solution:**
+    ```
+    "I'm getting this CORS error: [error message]
+    
+    Context:
+    - Frontend: React on localhost:3000
+    - Backend: Express on localhost:8000
+    - I've tried: Adding CORS middleware
+    
+    Please provide step-by-step solution."
+    ```
+  </Accordion>
+  
+  <Accordion title="Ignoring Token Limits" icon="text-width">
+    **Problem:**
+    Sending 50,000 words and asking for detailed analysis.
+    
+    **Solution:**
+    - Chunk large texts
+    - Summarize first, then analyze
+    - Use models with larger context windows
+    - Focus on specific sections
+  </Accordion>
+  
+  <Accordion title="No Output Validation" icon="check">
+    **Problem:**
+    Accepting any response without validation.
+    
+    **Solution:**
+    ```typescript
+    const response = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [...],
+      response_format: { type: "json_object" }, // Force JSON
+    });
+    
+    // Validate output
+    const result = JSON.parse(response.choices[0].message.content);
+    if (!result.sentiment || !result.category) {
+      throw new Error("Invalid response format");
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Optimization Tips
+
+### Reduce Token Usage
+
+<Tabs>
+  <Tab title="Verbose">
+    ```
+    I would greatly appreciate it if you could please help me by providing
+    a comprehensive and detailed explanation of how to properly configure
+    the settings in order to optimize performance.
+    ```
+    (25 tokens)
+  </Tab>
+  <Tab title="Concise">
+    ```
+    Explain how to configure settings for optimal performance.
+    ```
+    (10 tokens - 60% reduction)
+  </Tab>
+</Tabs>
+
+### Reuse System Prompts
+
+Cache system prompts for repeated use:
+
+```typescript
+const SYSTEM_PROMPT = `You are a helpful assistant...`; // Reused
+
+for (const userQuery of queries) {
+  const response = await client.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT }, // Same every time
+      { role: "user", content: userQuery },
+    ],
+  });
+}
+```
+
+### Use Temperature Appropriately
+
+```typescript
+// Factual tasks: Lower temperature (0.0-0.3)
+const factual = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: "What is 2+2?" }],
+  temperature: 0.0, // Deterministic
+});
+
+// Creative tasks: Higher temperature (0.7-1.0)
+const creative = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: "Write a poem about clouds" }],
+  temperature: 0.9, // More varied
+});
+```
+
+## Prompt Management with Helicone
+
+### Version Control
+
+Store and version prompts in Helicone:
+
+```typescript
+// Create prompt template
+const promptId = await createPrompt({
+  name: "customer-support-response",
+  template: `You are a support agent for {{company_name}}.
+  
+  Customer question: {{question}}
+  
+  Provide a helpful response following our guidelines:
+  {{guidelines}}`,
+  variables: ["company_name", "question", "guidelines"],
+});
+
+// Use prompt with variables
+const response = await client.chat.completions.create({
+  model: "helicone://customer-support-response:v2",
+  messages: [{
+    role: "user",
+    content: {
+      company_name: "Acme Corp",
+      question: userQuestion,
+      guidelines: supportGuidelines,
+    },
+  }],
+});
+```
+
+### A/B Testing with Prompt Versions
+
+```typescript
+// Version A: Formal tone
+// Version B: Casual tone
+
+const promptVersion = Math.random() > 0.5 ? "formal" : "casual";
+
+const response = await client.chat.completions.create({
+  model: `helicone://support-response:${promptVersion}`,
+  messages: [...],
+});
+
+// Compare performance in Helicone dashboard
+```
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card
+    title="Prompt Management"
+    icon="file-lines"
+    href="/prompts/overview"
+  >
+    Version and deploy prompts
+  </Card>
+  <Card
+    title="Experiments"
+    icon="flask"
+    href="/evaluations/experiments"
+  >
+    A/B test prompt variations
+  </Card>
+  <Card
+    title="Evaluations"
+    icon="check"
+    href="/evaluations/overview"
+  >
+    Score prompt quality
+  </Card>
+  <Card
+    title="OpenAI Prompt Engineering"
+    icon="book"
+    href="https://platform.openai.com/docs/guides/prompt-engineering"
+  >
+    Official OpenAI guide
+  </Card>
+</CardGroup>

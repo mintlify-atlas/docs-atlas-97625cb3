@@ -1,0 +1,532 @@
+---
+title: "Datasets"
+description: "Create and manage test datasets for evaluating AI models and prompts"
+---
+
+## Overview
+
+Datasets are collections of inputs used for testing and evaluating your AI applications. They provide consistent test cases for experiments, allow you to track performance over time, and ensure quality across prompt and model changes.
+
+## Key Concepts
+
+### What is a Dataset?
+
+A dataset consists of:
+- **Input records**: Test inputs with specific values
+- **Metadata**: Information about the dataset and its purpose
+- **Dataset rows**: Individual test cases within the dataset
+- **Prompt associations**: Links to specific prompt versions
+
+### Dataset Types
+
+**Manual Datasets**: Created by manually defining inputs
+- Curated test cases
+- Edge cases and failure scenarios
+- Regression tests
+
+**Imported Datasets**: Built from existing requests
+- Real production examples
+- Historical performance data
+- Representative samples
+
+## Creating Datasets
+
+### From the Dashboard
+
+<Steps>
+  <Step title="Navigate to Datasets">
+    Go to **Evaluations** > **Datasets** in your Helicone dashboard
+  </Step>
+  <Step title="Create New Dataset">
+    Click **New Dataset** and provide a name and description
+  </Step>
+  <Step title="Add Inputs">
+    Manually add input rows or import from existing requests
+  </Step>
+  <Step title="Associate with Prompts">
+    Optionally link the dataset to specific prompt versions
+  </Step>
+</Steps>
+
+### Via API
+
+Create datasets programmatically:
+
+```bash
+curl -X POST https://api.helicone.ai/v2/dataset/create \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Customer Support Evaluation",
+    "promptVersionId": "pv_abc123",
+    "metadata": {
+      "description": "Test cases for customer support scenarios",
+      "category": "support"
+    }
+  }'
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "datasetId": "ds_xyz789"
+  },
+  "error": null
+}
+```
+
+### Using SDKs
+
+<CodeGroup>
+```typescript TypeScript
+import { Helicone } from "@helicone/helicone";
+
+const helicone = new Helicone({
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+const dataset = await helicone.datasets.create({
+  name: "Customer Support Evaluation",
+  promptVersionId: "pv_abc123",
+  metadata: {
+    description: "Test cases for customer support scenarios",
+  },
+});
+
+console.log("Dataset ID:", dataset.datasetId);
+```
+
+```python Python
+from helicone import Helicone
+
+helicone = Helicone(api_key=os.environ["HELICONE_API_KEY"])
+
+dataset = helicone.datasets.create(
+    name="Customer Support Evaluation",
+    prompt_version_id="pv_abc123",
+    metadata={
+        "description": "Test cases for customer support scenarios"
+    }
+)
+
+print(f"Dataset ID: {dataset.dataset_id}")
+```
+</CodeGroup>
+
+## Adding Dataset Rows
+
+### Single Row
+
+Add individual test cases to a dataset:
+
+```bash
+curl -X POST https://api.helicone.ai/v2/dataset/{datasetId}/row \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inputRecordId": "inp_123",
+    "inputs": {
+      "customer_message": "I need help with my order",
+      "context": "Order #12345 placed yesterday"
+    }
+  }'
+```
+
+### Batch Import
+
+Add multiple rows at once:
+
+```typescript
+const rows = [
+  {
+    inputs: {
+      customer_message: "I need help with my order",
+      context: "Order #12345",
+    },
+  },
+  {
+    inputs: {
+      customer_message: "How do I return an item?",
+      context: "Order #12346",
+    },
+  },
+  {
+    inputs: {
+      customer_message: "Track my shipment",
+      context: "Order #12347",
+    },
+  },
+];
+
+await helicone.datasets.addRowsBatch({
+  datasetId: "ds_xyz789",
+  rows: rows,
+});
+```
+
+### From CSV
+
+Import test cases from a CSV file:
+
+```typescript
+import { parse } from "csv-parse/sync";
+import fs from "fs";
+
+const csvContent = fs.readFileSync("test-cases.csv", "utf-8");
+const records = parse(csvContent, {
+  columns: true,
+  skip_empty_lines: true,
+});
+
+const rows = records.map((record) => ({
+  inputs: {
+    customer_message: record.message,
+    context: record.context,
+  },
+}));
+
+await helicone.datasets.addRowsBatch({
+  datasetId: datasetId,
+  rows: rows,
+});
+```
+
+## Querying Datasets
+
+### List All Datasets
+
+```bash
+curl https://api.helicone.ai/v2/datasets \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": "ds_xyz789",
+      "name": "Customer Support Evaluation",
+      "created_at": "2024-01-15T10:30:00Z",
+      "meta": {
+        "description": "Test cases for customer support scenarios",
+        "promptVersionId": "pv_abc123"
+      }
+    }
+  ],
+  "error": null
+}
+```
+
+### Get Dataset by ID
+
+```bash
+curl https://api.helicone.ai/v2/dataset/{datasetId} \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Filter by Prompt Version
+
+Get datasets associated with a specific prompt:
+
+```bash
+curl https://api.helicone.ai/v2/datasets?promptVersionId=pv_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Managing Dataset Rows
+
+### View Dataset Rows
+
+```typescript
+const dataset = await helicone.datasets.get(datasetId);
+
+console.log("Total rows:", dataset.rows.length);
+
+dataset.rows.forEach((row, index) => {
+  console.log(`Row ${index}:`, row.inputs);
+});
+```
+
+### Update Dataset Row
+
+```bash
+curl -X PATCH https://api.helicone.ai/v2/dataset/row/{rowId} \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inputs": {
+      "customer_message": "Updated message",
+      "context": "Updated context"
+    }
+  }'
+```
+
+### Delete Dataset Row
+
+```bash
+curl -X DELETE https://api.helicone.ai/v2/dataset/row/{rowId} \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Using Datasets in Experiments
+
+Datasets are the foundation for running experiments:
+
+```typescript
+// Create an experiment from a dataset
+const experiment = await helicone.experiments.create({
+  datasetId: datasetId,
+  name: "Prompt Comparison Test",
+  metadata: {
+    description: "Testing v1 vs v2 prompts",
+  },
+});
+
+// Add prompt variations to test
+await experiment.addColumn({
+  promptVersionId: "pv_v1",
+  model: "gpt-4",
+});
+
+await experiment.addColumn({
+  promptVersionId: "pv_v2",
+  model: "gpt-4",
+});
+
+// Run the experiment
+await experiment.run();
+```
+
+See [Experiments](/evaluations/experiments) for more details.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Start Small and Iterate">
+    Begin with a focused dataset:
+    
+    - Start with 10-20 representative examples
+    - Cover the most common use cases first
+    - Add edge cases as you discover them
+    - Expand based on production failures
+    
+    ```typescript
+    const initialDataset = [
+      { inputs: { query: "Simple question" } },
+      { inputs: { query: "Complex multi-part question" } },
+      { inputs: { query: "Edge case with special characters" } },
+    ];
+    ```
+  </Accordion>
+
+  <Accordion title="Ensure Diversity">
+    Make your dataset representative:
+    
+    - Include different input lengths
+    - Cover various topics and domains
+    - Test different user intents
+    - Include both success and failure cases
+    
+    ```typescript
+    const diverseDataset = [
+      { inputs: { query: "Short query" } },
+      { inputs: { query: "A very long query with lots of context..." } },
+      { inputs: { query: "Technical question about APIs" } },
+      { inputs: { query: "Casual conversation starter" } },
+    ];
+    ```
+  </Accordion>
+
+  <Accordion title="Version Your Datasets">
+    Track dataset changes over time:
+    
+    ```typescript
+    const dataset = await helicone.datasets.create({
+      name: "Support Cases v2.1",
+      metadata: {
+        version: "2.1",
+        changelog: "Added 5 new edge cases from production",
+        previousVersion: "ds_old123",
+      },
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Document Expected Behaviors">
+    Add metadata to guide evaluation:
+    
+    ```typescript
+    const row = {
+      inputs: {
+        query: "How do I cancel my subscription?",
+      },
+      metadata: {
+        expectedIntent: "cancellation",
+        expectedTone: "empathetic",
+        shouldMentionRetention: true,
+      },
+    };
+    ```
+  </Accordion>
+
+  <Accordion title="Use Real Production Data">
+    Build datasets from actual usage:
+    
+    ```typescript
+    // Get production requests
+    const requests = await helicone.requests.query({
+      filter: { status: "success" },
+      limit: 100,
+    });
+    
+    // Convert to dataset rows
+    const rows = requests.map(req => ({
+      inputRecordId: req.inputRecordId,
+      sourceRequest: req.id,
+    }));
+    
+    await helicone.datasets.addRowsBatch({
+      datasetId,
+      rows,
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Dataset Maintenance
+
+### Regular Updates
+
+<Steps>
+  <Step title="Review Performance">
+    Analyze which test cases are failing most often
+  </Step>
+  <Step title="Add New Cases">
+    Include new patterns discovered in production
+  </Step>
+  <Step title="Remove Outdated Cases">
+    Clean up test cases that are no longer relevant
+  </Step>
+  <Step title="Rebalance">
+    Ensure diverse coverage across use cases
+  </Step>
+</Steps>
+
+### Quality Checks
+
+Validate your dataset quality:
+
+```typescript
+const dataset = await helicone.datasets.get(datasetId);
+
+// Check for diversity
+const uniqueInputs = new Set(
+  dataset.rows.map((row) => JSON.stringify(row.inputs))
+);
+console.log(`Unique inputs: ${uniqueInputs.size}/${dataset.rows.length}`);
+
+// Check for completeness
+const incompleteRows = dataset.rows.filter(
+  (row) => !row.inputs || Object.keys(row.inputs).length === 0
+);
+console.log(`Incomplete rows: ${incompleteRows.length}`);
+
+// Check input length distribution
+const lengths = dataset.rows.map(
+  (row) => JSON.stringify(row.inputs).length
+);
+const avgLength = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+console.log(`Average input length: ${avgLength}`);
+```
+
+## Common Use Cases
+
+### 1. Regression Testing
+
+Ensure prompt changes don't break existing functionality:
+
+```typescript
+const regressionDataset = await helicone.datasets.create({
+  name: "Regression Test Suite",
+  metadata: {
+    purpose: "Prevent quality degradation",
+    updateFrequency: "weekly",
+  },
+});
+
+// Add known good examples
+await helicone.datasets.addRowsBatch({
+  datasetId: regressionDataset.datasetId,
+  rows: knownGoodExamples,
+});
+```
+
+### 2. A/B Testing
+
+Compare different approaches:
+
+```typescript
+const abTestDataset = await helicone.datasets.create({
+  name: "A/B Test: Concise vs Detailed",
+  metadata: {
+    variants: ["concise_prompt", "detailed_prompt"],
+  },
+});
+```
+
+### 3. Edge Case Collection
+
+Document and test failure scenarios:
+
+```typescript
+const edgeCases = await helicone.datasets.create({
+  name: "Edge Cases and Failures",
+  metadata: {
+    description: "Known problematic inputs",
+  },
+});
+
+await helicone.datasets.addRow({
+  datasetId: edgeCases.datasetId,
+  inputs: {
+    query: "Input that previously caused hallucination",
+  },
+  metadata: {
+    issue: "hallucination",
+    reportedDate: "2024-01-15",
+  },
+});
+```
+
+### 4. Performance Benchmarking
+
+Track performance across model versions:
+
+```typescript
+const benchmark = await helicone.datasets.create({
+  name: "Standard Benchmark v1",
+  metadata: {
+    purpose: "Track performance over time",
+    baselineModel: "gpt-4",
+  },
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Run Experiments" icon="flask" href="/evaluations/experiments">
+    Use your datasets to compare prompts and models
+  </Card>
+  <Card title="Set up Evaluators" icon="robot" href="/evaluations/evaluators">
+    Automate scoring on your test datasets
+  </Card>
+  <Card title="Track Scores" icon="chart-line" href="/evaluations/scores">
+    Monitor performance with evaluation metrics
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference">
+    View complete dataset API documentation
+  </Card>
+</CardGroup>

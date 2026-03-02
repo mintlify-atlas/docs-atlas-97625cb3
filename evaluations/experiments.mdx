@@ -1,0 +1,651 @@
+---
+title: "Experiments"
+description: "Run A/B tests and compare prompt variations, models, and configurations side-by-side"
+---
+
+## Overview
+
+Experiments allow you to systematically compare different AI configurations by running them against the same dataset. Test multiple prompt versions, models, or parameters side-by-side and measure their performance with automated evaluators.
+
+## Key Concepts
+
+### Experiment Components
+
+**Experiment Table**: The core structure containing:
+- **Rows**: Test cases from your dataset (inputs)
+- **Columns**: Different configurations to test (hypotheses)
+- **Cells**: Individual outputs for each input-configuration pair
+- **Scores**: Automated evaluation metrics
+
+**Hypothesis**: A specific configuration to test:
+- Prompt version
+- Model selection
+- Parameters (temperature, max tokens, etc.)
+- Provider settings
+
+**Run**: An execution of a hypothesis against dataset inputs, producing outputs and scores.
+
+## Creating Experiments
+
+### From Scratch
+
+Create an empty experiment and build it up:
+
+```bash
+curl -X POST https://api.helicone.ai/v2/experiment/create/empty \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json"
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "experimentId": "exp_abc123"
+  },
+  "error": null
+}
+```
+
+### From a Prompt
+
+Start with an existing prompt version:
+
+```bash
+curl -X POST https://api.helicone.ai/v1/experiment/table/new \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "promptVersionId": "pv_xyz789",
+    "experimentTableMetadata": {
+      "datasetId": "ds_dataset123",
+      "name": "GPT-4 vs Claude Comparison"
+    }
+  }'
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "tableId": "tbl_456def",
+    "experimentId": "exp_abc123"
+  },
+  "error": null
+}
+```
+
+### Using SDKs
+
+<CodeGroup>
+```typescript TypeScript
+import { Helicone } from "@helicone/helicone";
+
+const helicone = new Helicone({
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+// Create experiment from dataset
+const experiment = await helicone.experiments.create({
+  datasetId: "ds_dataset123",
+  name: "Prompt Version Comparison",
+  metadata: {
+    description: "Testing optimized prompt vs baseline",
+  },
+});
+
+console.log("Experiment ID:", experiment.experimentId);
+```
+
+```python Python
+from helicone import Helicone
+
+helicone = Helicone(api_key=os.environ["HELICONE_API_KEY"])
+
+experiment = helicone.experiments.create(
+    dataset_id="ds_dataset123",
+    name="Prompt Version Comparison",
+    metadata={
+        "description": "Testing optimized prompt vs baseline"
+    }
+)
+
+print(f"Experiment ID: {experiment.experiment_id}")
+```
+</CodeGroup>
+
+## Adding Hypotheses (Columns)
+
+### Add a Prompt Version Column
+
+Test a specific prompt configuration:
+
+```bash
+curl -X POST https://api.helicone.ai/v1/experiment/table/{tableId}/column \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "columnName": "Optimized Prompt v2",
+    "columnType": "hypothesis",
+    "promptVersionId": "pv_optimized_v2",
+    "inputKeys": ["query", "context"]
+  }'
+```
+
+### Add Multiple Variations
+
+Compare different approaches:
+
+```typescript
+// Add baseline prompt
+await helicone.experiments.addColumn({
+  experimentTableId: tableId,
+  columnName: "Baseline",
+  columnType: "hypothesis",
+  promptVersionId: "pv_baseline",
+});
+
+// Add optimized prompt
+await helicone.experiments.addColumn({
+  experimentTableId: tableId,
+  columnName: "Optimized",
+  columnType: "hypothesis",
+  promptVersionId: "pv_optimized",
+});
+
+// Add model variation
+await helicone.experiments.addColumn({
+  experimentTableId: tableId,
+  columnName: "Claude 3 Opus",
+  columnType: "hypothesis",
+  promptVersionId: "pv_baseline_claude",
+});
+```
+
+## Running Experiments
+
+### Execute a Hypothesis
+
+Run a specific column against all dataset rows:
+
+```typescript
+// Get the experiment table
+const table = await helicone.experiments.getTable(tableId);
+
+// For each row, run each hypothesis
+for (const row of table.rows) {
+  for (const column of table.columns) {
+    if (column.columnType === "hypothesis") {
+      // Execute the prompt with the input
+      const result = await runPrompt({
+        promptVersionId: column.promptVersionId,
+        inputs: row.inputs,
+      });
+      
+      // Update the cell with the output
+      await helicone.experiments.updateCell({
+        cellId: getCellId(row, column),
+        value: result.output,
+        status: "completed",
+      });
+    }
+  }
+}
+```
+
+### Batch Execution
+
+Run all hypotheses efficiently:
+
+```typescript
+const runExperiment = async (tableId: string) => {
+  const table = await helicone.experiments.getTable(tableId);
+  
+  const hypotheses = table.columns.filter(
+    (col) => col.columnType === "hypothesis"
+  );
+  
+  // Run all hypothesis-row combinations in parallel
+  const runPromises = table.rows.flatMap((row) =>
+    hypotheses.map((hypothesis) =>
+      executeAndScore({
+        row,
+        hypothesis,
+        tableId,
+      })
+    )
+  );
+  
+  await Promise.all(runPromises);
+  
+  console.log("Experiment completed!");
+};
+
+const executeAndScore = async ({ row, hypothesis, tableId }) => {
+  // Run the prompt
+  const result = await runPrompt({
+    promptVersionId: hypothesis.promptVersionId,
+    inputs: row.inputs,
+  });
+  
+  // Update the cell
+  const cellId = getCellId(row, hypothesis);
+  await helicone.experiments.updateCell({
+    cellId,
+    value: result.output,
+    status: "completed",
+    metadata: {
+      requestId: result.requestId,
+      model: result.model,
+    },
+  });
+  
+  return result;
+};
+```
+
+## Viewing Results
+
+### Get Experiment Table
+
+Retrieve the complete experiment data:
+
+```bash
+curl -X POST https://api.helicone.ai/v1/experiment/table/{tableId}/query \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "id": "tbl_456def",
+    "name": "GPT-4 vs Claude Comparison",
+    "created_at": "2024-01-15T10:30:00Z",
+    "metadata": {...},
+    "rows": [...],
+    "columns": [...],
+    "cells": [...]
+  },
+  "error": null
+}
+```
+
+### Get Hypothesis Scores
+
+Retrieve aggregated scores for a hypothesis:
+
+```bash
+curl -X POST https://api.helicone.ai/v1/experiment/hypothesis/{hypothesisId}/scores/query \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "runsCount": 50,
+    "scores": {
+      "accuracy": {
+        "average": 0.87,
+        "min": 0.45,
+        "max": 1.0,
+        "distribution": [...]
+      },
+      "relevance": {
+        "average": 0.92,
+        "min": 0.67,
+        "max": 1.0,
+        "distribution": [...]
+      }
+    }
+  },
+  "error": null
+}
+```
+
+## Adding Evaluators
+
+### Attach Evaluators to Experiment
+
+Automatically score all outputs:
+
+```bash
+curl -X POST https://api.helicone.ai/v1/experiment/{experimentId}/evaluators \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "evaluatorId": "eval_accuracy_123"
+  }'
+```
+
+### Run Evaluators
+
+Execute all attached evaluators:
+
+```bash
+curl -X POST https://api.helicone.ai/v1/experiment/{experimentId}/evaluators/run \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Using Multiple Evaluators
+
+```typescript
+// Add multiple evaluators to measure different aspects
+const evaluators = [
+  "eval_accuracy",
+  "eval_relevance",
+  "eval_tone",
+  "eval_safety",
+];
+
+for (const evaluatorId of evaluators) {
+  await helicone.experiments.addEvaluator({
+    experimentId,
+    evaluatorId,
+  });
+}
+
+// Run all evaluators
+await helicone.experiments.runEvaluators(experimentId);
+```
+
+See [Evaluators](/evaluations/evaluators) for more details on creating and using evaluators.
+
+## Analyzing Results
+
+### Score Comparison
+
+Visualize performance across hypotheses:
+
+```typescript
+const compareHypotheses = async (experimentId: string) => {
+  const hypotheses = await getExperimentHypotheses(experimentId);
+  
+  for (const hypothesis of hypotheses) {
+    const scores = await helicone.experiments.getHypothesisScores(
+      hypothesis.id
+    );
+    
+    console.log(`\n${hypothesis.name}:`);
+    console.log(`  Runs: ${scores.runsCount}`);
+    
+    for (const [scoreName, scoreData] of Object.entries(scores.scores)) {
+      console.log(`  ${scoreName}: ${scoreData.average.toFixed(3)}`);
+    }
+  }
+};
+```
+
+**Output:**
+```
+Baseline Prompt:
+  Runs: 50
+  accuracy: 0.850
+  relevance: 0.880
+  tone: 0.790
+
+Optimized Prompt:
+  Runs: 50
+  accuracy: 0.920
+  relevance: 0.940
+  tone: 0.910
+```
+
+### Statistical Significance
+
+Determine if differences are meaningful:
+
+```typescript
+const calculateSignificance = (scores1: number[], scores2: number[]) => {
+  // Simple t-test implementation
+  const mean1 = scores1.reduce((a, b) => a + b) / scores1.length;
+  const mean2 = scores2.reduce((a, b) => a + b) / scores2.length;
+  
+  const variance1 = scores1.reduce((a, b) => a + Math.pow(b - mean1, 2), 0) / scores1.length;
+  const variance2 = scores2.reduce((a, b) => a + Math.pow(b - mean2, 2), 0) / scores2.length;
+  
+  const pooledStd = Math.sqrt((variance1 + variance2) / 2);
+  const tStat = (mean1 - mean2) / (pooledStd * Math.sqrt(2 / scores1.length));
+  
+  return {
+    mean1,
+    mean2,
+    difference: mean2 - mean1,
+    tStat,
+    significant: Math.abs(tStat) > 2, // Simplified threshold
+  };
+};
+```
+
+## Dashboard Visualization
+
+View experiments in the Helicone dashboard:
+
+1. Navigate to **Evaluations** > **Experiments**
+2. Select an experiment to view
+3. See the experiment table with:
+   - Input rows from your dataset
+   - Output columns for each hypothesis
+   - Score columns from evaluators
+   - Visual score comparisons
+
+### Score Graphs
+
+The dashboard shows:
+- Line charts comparing scores across hypotheses
+- Distribution histograms for each metric
+- Time-series trends for long-running experiments
+- Detailed cell-level inspection
+
+## Managing Experiments
+
+### Update Experiment Metadata
+
+```bash
+curl -X POST https://api.helicone.ai/v1/experiment/update-meta \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "experimentId": "exp_abc123",
+    "meta": {
+      "status": "completed",
+      "winner": "hypothesis_2",
+      "notes": "Optimized prompt performed 8% better"
+    }
+  }'
+```
+
+### Add Rows to Running Experiment
+
+```bash
+curl -X POST https://api.helicone.ai/v1/experiment/table/{tableId}/row/new \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "promptVersionId": "pv_xyz789",
+    "inputs": {
+      "query": "New test case",
+      "context": "Additional context"
+    }
+  }'
+```
+
+### Delete Rows
+
+```bash
+curl -X DELETE https://api.helicone.ai/v1/experiment/table/{tableId}/row/{rowIndex} \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Test One Variable at a Time">
+    For clearer insights, change only one thing:
+    
+    ```typescript
+    // Good: Comparing prompt versions with same model
+    const columns = [
+      { name: "Baseline", promptId: "v1", model: "gpt-4" },
+      { name: "Optimized", promptId: "v2", model: "gpt-4" },
+    ];
+    
+    // Avoid: Changing multiple variables
+    const confoundedColumns = [
+      { name: "Baseline", promptId: "v1", model: "gpt-4" },
+      { name: "Optimized", promptId: "v2", model: "gpt-4-turbo" },
+    ];
+    ```
+  </Accordion>
+
+  <Accordion title="Use Representative Datasets">
+    Ensure your test data reflects real usage:
+    
+    - Include common cases (80%)
+    - Include edge cases (20%)
+    - Match production input distributions
+    - Update datasets as usage patterns change
+  </Accordion>
+
+  <Accordion title="Set Up Multiple Evaluators">
+    Measure different quality dimensions:
+    
+    ```typescript
+    const evaluators = [
+      "accuracy",      // Factual correctness
+      "relevance",     // Response relevance
+      "tone",          // Appropriate tone
+      "safety",        // Content safety
+      "conciseness",   // Response length
+    ];
+    ```
+  </Accordion>
+
+  <Accordion title="Document Your Findings">
+    Keep track of learnings:
+    
+    ```typescript
+    await helicone.experiments.updateMetadata({
+      experimentId,
+      meta: {
+        conclusion: "Optimized prompt improved accuracy by 8%",
+        deploymentDecision: "Deploy optimized prompt to production",
+        nextSteps: "Test with larger dataset",
+        date: new Date().toISOString(),
+      },
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Run Sufficient Iterations">
+    Ensure statistical validity:
+    
+    - Minimum 30-50 test cases per hypothesis
+    - More cases for smaller expected differences
+    - Account for randomness in LLM outputs
+    - Consider running multiple times with same inputs
+  </Accordion>
+</AccordionGroup>
+
+## Common Experiment Types
+
+### 1. Prompt Optimization
+
+Compare different prompt formulations:
+
+```typescript
+const experiment = await helicone.experiments.create({
+  name: "Prompt Optimization: Customer Support",
+  datasetId: "ds_support_cases",
+});
+
+// Add variations
+await experiment.addColumn({
+  columnName: "Current Prompt",
+  promptVersionId: "pv_current",
+});
+
+await experiment.addColumn({
+  columnName: "Shorter Prompt",
+  promptVersionId: "pv_concise",
+});
+
+await experiment.addColumn({
+  columnName: "More Detailed Prompt",
+  promptVersionId: "pv_detailed",
+});
+```
+
+### 2. Model Comparison
+
+Compare different models:
+
+```typescript
+const models = [
+  { name: "GPT-4", id: "pv_gpt4" },
+  { name: "GPT-4 Turbo", id: "pv_gpt4_turbo" },
+  { name: "Claude 3 Opus", id: "pv_claude_opus" },
+  { name: "Claude 3.5 Sonnet", id: "pv_claude_sonnet" },
+];
+
+for (const model of models) {
+  await experiment.addColumn({
+    columnName: model.name,
+    promptVersionId: model.id,
+  });
+}
+```
+
+### 3. Parameter Tuning
+
+Test different temperature/parameter settings:
+
+```typescript
+const temperatures = [0.0, 0.3, 0.7, 1.0];
+
+for (const temp of temperatures) {
+  await experiment.addColumn({
+    columnName: `Temperature ${temp}`,
+    promptVersionId: createPromptWithTemperature(basePromptId, temp),
+  });
+}
+```
+
+### 4. Regression Testing
+
+Ensure changes don't degrade quality:
+
+```typescript
+const regressionExperiment = await helicone.experiments.create({
+  name: "Regression Test: New Prompt Version",
+  datasetId: "ds_regression_suite",
+});
+
+await regressionExperiment.addColumn({
+  columnName: "Production (v1.5)",
+  promptVersionId: "pv_production",
+});
+
+await regressionExperiment.addColumn({
+  columnName: "Candidate (v1.6)",
+  promptVersionId: "pv_candidate",
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Set up Evaluators" icon="gavel" href="/evaluations/evaluators">
+    Automate scoring for your experiments
+  </Card>
+  <Card title="Create Datasets" icon="database" href="/evaluations/datasets">
+    Build comprehensive test datasets
+  </Card>
+  <Card title="Track Scores" icon="chart-line" href="/evaluations/scores">
+    Monitor evaluation metrics over time
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference">
+    View complete experiment API docs
+  </Card>
+</CardGroup>

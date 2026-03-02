@@ -1,0 +1,474 @@
+---
+title: "Scores"
+description: "Track and analyze quality metrics for your AI requests"
+---
+
+## Overview
+
+Scores allow you to measure the quality of your AI requests by assigning numerical or boolean values to each request-response pair. Scores can be added manually, through automated evaluators, or via API integration.
+
+## Adding Scores
+
+### Via API
+
+Add scores to individual requests using the Evals API:
+
+```bash
+curl -X POST https://api.helicone.ai/v1/evals/{requestId} \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "accuracy",
+    "score": 0.95
+  }'
+```
+
+<ParamField path="requestId" type="string" required>
+  The ID of the request to score
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Name of the score metric (e.g., "accuracy", "relevance", "helpfulness")
+</ParamField>
+
+<ParamField body="score" type="number" required>
+  Numerical score value (typically 0-1 or 0-100)
+</ParamField>
+
+### Using SDKs
+
+Add scores programmatically in your application:
+
+<CodeGroup>
+```typescript TypeScript
+import { Helicone } from "@helicone/helicone";
+
+const helicone = new Helicone({
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+await helicone.evals.addScore({
+  requestId: "req_123abc",
+  name: "accuracy",
+  score: 0.95,
+});
+```
+
+```python Python
+from helicone import Helicone
+
+helicone = Helicone(api_key=os.environ["HELICONE_API_KEY"])
+
+helicone.evals.add_score(
+    request_id="req_123abc",
+    name="accuracy",
+    score=0.95
+)
+```
+</CodeGroup>
+
+### Boolean Scores
+
+For binary evaluations, use boolean scores:
+
+```bash
+curl -X POST https://api.helicone.ai/v1/evals/{requestId} \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "contains_pii",
+    "score": false
+  }'
+```
+
+## Querying Scores
+
+### Get All Score Names
+
+Retrieve a list of all score names in your organization:
+
+```bash
+curl https://api.helicone.ai/v1/evals/scores \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Response:**
+```json
+{
+  "data": ["accuracy", "relevance", "helpfulness", "tone"],
+  "error": null
+}
+```
+
+### Query Scores with Filters
+
+Get detailed score data with filtering:
+
+```bash
+curl -X POST https://api.helicone.ai/v1/evals/query \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filter": {
+      "request_response_rmt": {
+        "model": {
+          "equals": "gpt-4"
+        }
+      }
+    },
+    "timeFilter": {
+      "start": "2024-01-01T00:00:00Z",
+      "end": "2024-12-31T23:59:59Z"
+    },
+    "limit": 100
+  }'
+```
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "name": "accuracy",
+      "averageScore": 0.87,
+      "minScore": 0.45,
+      "maxScore": 1.0,
+      "count": 1523,
+      "overTime": [...],
+      "averageOverTime": [...]
+    }
+  ],
+  "error": null
+}
+```
+
+### Score Distributions
+
+Analyze how scores are distributed:
+
+```bash
+curl -X POST https://api.helicone.ai/v1/evals/score-distributions/query \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filter": "all",
+    "timeFilter": {
+      "start": "2024-01-01T00:00:00Z",
+      "end": "2024-12-31T23:59:59Z"
+    }
+  }'
+```
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "name": "accuracy",
+      "distribution": [
+        {"lower": 0.0, "upper": 0.2, "value": 45},
+        {"lower": 0.2, "upper": 0.4, "value": 123},
+        {"lower": 0.4, "upper": 0.6, "value": 287},
+        {"lower": 0.6, "upper": 0.8, "value": 521},
+        {"lower": 0.8, "upper": 1.0, "value": 847}
+      ]
+    }
+  ],
+  "error": null
+}
+```
+
+## Score Types
+
+### Numerical Scores
+
+Use numerical scores for continuous metrics:
+
+- **Range 0-1**: Accuracy, relevance, quality (0.0 to 1.0)
+- **Range 0-100**: Percentage scores (0 to 100)
+- **Custom ranges**: Any numerical value that makes sense for your metric
+
+```typescript
+// Normalized score (0-1)
+await helicone.evals.addScore({
+  requestId: requestId,
+  name: "accuracy",
+  score: 0.87,
+});
+
+// Percentage score (0-100)
+await helicone.evals.addScore({
+  requestId: requestId,
+  name: "confidence",
+  score: 87,
+});
+```
+
+### Boolean Scores
+
+Use boolean scores for binary evaluations:
+
+- Content safety (safe/unsafe)
+- PII detection (contains/doesn't contain)
+- Compliance checks (compliant/non-compliant)
+- Format validation (valid/invalid)
+
+```typescript
+await helicone.evals.addScore({
+  requestId: requestId,
+  name: "is_safe",
+  score: true,
+});
+
+await helicone.evals.addScore({
+  requestId: requestId,
+  name: "contains_pii",
+  score: false,
+});
+```
+
+## Common Use Cases
+
+### 1. Human Feedback
+
+Collect user ratings on responses:
+
+```typescript
+// After user provides feedback
+await helicone.evals.addScore({
+  requestId: requestId,
+  name: "user_rating",
+  score: 4.5, // out of 5
+});
+```
+
+### 2. Content Moderation
+
+Track safety and appropriateness:
+
+```typescript
+const moderationResult = await moderateContent(response);
+
+await helicone.evals.addScore({
+  requestId: requestId,
+  name: "content_safety",
+  score: moderationResult.isSafe,
+});
+```
+
+### 3. Business Metrics
+
+Measure business-specific outcomes:
+
+```typescript
+// Did the response lead to conversion?
+await helicone.evals.addScore({
+  requestId: requestId,
+  name: "conversion",
+  score: userConverted,
+});
+
+// Customer satisfaction
+await helicone.evals.addScore({
+  requestId: requestId,
+  name: "csat",
+  score: customerSatisfactionScore,
+});
+```
+
+### 4. Quality Assurance
+
+Track automated quality checks:
+
+```typescript
+const checks = await runQualityChecks(response);
+
+await helicone.evals.addScore({
+  requestId: requestId,
+  name: "hallucination_check",
+  score: !checks.hasHallucination,
+});
+
+await helicone.evals.addScore({
+  requestId: requestId,
+  name: "factual_accuracy",
+  score: checks.accuracyScore,
+});
+```
+
+## Score Naming Conventions
+
+<Tip>
+  Use consistent naming conventions for scores across your organization:
+</Tip>
+
+- **Lowercase with underscores**: `response_quality`, `user_satisfaction`
+- **Descriptive names**: Clearly indicate what is being measured
+- **Avoid spaces**: Use underscores instead of spaces
+- **Consistent scales**: Document the scale (0-1, 0-100, boolean) for each score
+
+**Good examples:**
+- `accuracy` (0-1 scale)
+- `user_rating` (1-5 scale)
+- `is_compliant` (boolean)
+- `response_time_ms` (milliseconds)
+
+**Avoid:**
+- `Score 1` (not descriptive)
+- `user-rating` (use underscores)
+- `ACCURACY` (use lowercase)
+- `acc` (too abbreviated)
+
+## Analyzing Scores
+
+### Dashboard Views
+
+View scores in the Helicone dashboard:
+
+1. Navigate to **Evaluations** > **Scores**
+2. Select a time range
+3. View score distributions and trends
+4. Filter requests by score values
+5. Export data for further analysis
+
+### Filtering by Scores
+
+Use scores to filter requests:
+
+```typescript
+const requests = await helicone.requests.query({
+  filter: {
+    scores: {
+      accuracy: { gte: 0.8 },
+    },
+  },
+});
+```
+
+### Tracking Trends
+
+Monitor how scores change over time:
+
+- Identify degradation in quality
+- Measure impact of prompt changes
+- Compare different models
+- Track improvement after optimizations
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Add Scores Asynchronously">
+    Don't block your main application flow:
+    
+    ```typescript
+    // Fire and forget
+    helicone.evals.addScore({
+      requestId,
+      name: "accuracy",
+      score: 0.95,
+    }).catch(console.error);
+    ```
+  </Accordion>
+
+  <Accordion title="Use Multiple Score Dimensions">
+    Track different aspects of quality:
+    
+    ```typescript
+    await Promise.all([
+      helicone.evals.addScore({ requestId, name: "accuracy", score: 0.9 }),
+      helicone.evals.addScore({ requestId, name: "relevance", score: 0.85 }),
+      helicone.evals.addScore({ requestId, name: "tone", score: 0.92 }),
+    ]);
+    ```
+  </Accordion>
+
+  <Accordion title="Normalize Scores">
+    Keep scores on consistent scales for easier comparison:
+    
+    - Convert ratings to 0-1 range: `score / maxRating`
+    - Normalize percentages: `percentage / 100`
+    - Document the scale used for each score
+  </Accordion>
+
+  <Accordion title="Handle Errors Gracefully">
+    Don't let scoring failures break your application:
+    
+    ```typescript
+    try {
+      await helicone.evals.addScore({...});
+    } catch (error) {
+      console.error("Failed to add score:", error);
+      // Continue application flow
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Integration Examples
+
+### Real-time Scoring
+
+```typescript
+import { Helicone } from "@helicone/helicone";
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+const helicone = new Helicone({
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+// Make request
+const completion = await openai.chat.completions.create({
+  model: "gpt-4",
+  messages: [{role: "user", content: "Hello!"}],
+});
+
+// Extract request ID from headers
+const requestId = completion.id;
+
+// Score the response
+await helicone.evals.addScore({
+  requestId: requestId,
+  name: "response_quality",
+  score: await evaluateResponse(completion),
+});
+```
+
+### Batch Scoring
+
+```typescript
+// Score multiple requests at once
+const scorePromises = requestIds.map((requestId) =>
+  helicone.evals.addScore({
+    requestId,
+    name: "quality",
+    score: calculateScore(requestId),
+  })
+);
+
+await Promise.all(scorePromises);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create Datasets" icon="database" href="/evaluations/datasets">
+    Build test datasets for evaluation
+  </Card>
+  <Card title="Run Experiments" icon="flask" href="/evaluations/experiments">
+    Compare prompts using scores
+  </Card>
+  <Card title="Set up Evaluators" icon="robot" href="/evaluations/evaluators">
+    Automate scoring with AI judges
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference">
+    View complete API documentation
+  </Card>
+</CardGroup>

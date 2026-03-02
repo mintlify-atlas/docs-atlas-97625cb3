@@ -1,0 +1,355 @@
+---
+title: "Quickstart"
+description: "Get started with Helicone's AI Gateway in 2 minutes"
+icon: "rocket"
+---
+
+This guide will get you up and running with the AI Gateway in minutes. You'll learn how to access 100+ models through a single API.
+
+## Prerequisites
+
+- A Helicone account ([sign up here](https://helicone.ai/signup))
+- Node.js, Python, or any HTTP client
+- 2 minutes of your time
+
+## Step 1: Get Your API Key
+
+<Steps>
+  <Step title="Sign Up">
+    Create a free account at [helicone.ai/signup](https://helicone.ai/signup)
+  </Step>
+  
+  <Step title="Get API Key">
+    Your API key is available immediately in the dashboard at [helicone.ai/settings](https://helicone.ai/settings)
+  </Step>
+  
+  <Step title="Add Credits (Optional)">
+    For PTB (Pay Through Billing), add credits at [helicone.ai/credits](https://helicone.ai/credits). Not needed if using BYOK.
+  </Step>
+</Steps>
+
+## Step 2: Install SDK
+
+<Tabs>
+  <Tab title="TypeScript/JavaScript">
+    ```bash
+    npm install openai
+    # or
+    yarn add openai
+    # or
+    pnpm add openai
+    ```
+  </Tab>
+  
+  <Tab title="Python">
+    ```bash
+    pip install openai
+    ```
+  </Tab>
+  
+  <Tab title="cURL">
+    No installation needed - use cURL directly from your terminal.
+  </Tab>
+</Tabs>
+
+## Step 3: Make Your First Request
+
+<Tabs>
+  <Tab title="TypeScript/JavaScript">
+    ```typescript
+    import OpenAI from "openai";
+
+    const client = new OpenAI({
+      baseURL: "https://ai-gateway.helicone.ai",
+      apiKey: process.env.HELICONE_API_KEY,
+    });
+
+    async function main() {
+      const response = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "user",
+            content: "Explain quantum computing in simple terms"
+          }
+        ],
+      });
+
+      console.log(response.choices[0].message.content);
+    }
+
+    main();
+    ```
+  </Tab>
+  
+  <Tab title="Python">
+    ```python
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url="https://ai-gateway.helicone.ai",
+        api_key="YOUR_HELICONE_API_KEY"
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "user",
+                "content": "Explain quantum computing in simple terms"
+            }
+        ],
+    )
+
+    print(response.choices[0].message.content)
+    ```
+  </Tab>
+  
+  <Tab title="cURL">
+    ```bash
+    curl https://ai-gateway.helicone.ai/v1/chat/completions \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer YOUR_HELICONE_API_KEY" \
+      -d '{
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Explain quantum computing in simple terms"
+          }
+        ]
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+## Step 4: Try Different Models
+
+The gateway supports 100+ models. Simply change the `model` parameter:
+
+<CodeGroup>
+```typescript Anthropic Claude
+const response = await client.chat.completions.create({
+  model: "claude-sonnet-4",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+```typescript Google Gemini
+const response = await client.chat.completions.create({
+  model: "gemini-2.0-flash",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+```typescript DeepSeek
+const response = await client.chat.completions.create({
+  model: "deepseek-chat",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+```typescript Llama 3.3
+const response = await client.chat.completions.create({
+  model: "llama-3.3-70b",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+</CodeGroup>
+
+Browse all models at [helicone.ai/models](https://helicone.ai/models).
+
+## Step 5: View Your Logs
+
+All requests are automatically logged. View them at:
+
+- **Dashboard**: [helicone.ai/dashboard](https://helicone.ai/dashboard)
+- **Requests**: [helicone.ai/requests](https://helicone.ai/requests)
+
+You'll see:
+- Request and response bodies
+- Latency and token usage
+- Provider used
+- Cost (when available)
+- Success/error status
+
+## Using BYOK (Bring Your Own Keys)
+
+To use your own provider API keys instead of PTB:
+
+<Steps>
+  <Step title="Add Provider Keys">
+    Go to [helicone.ai/settings/keys](https://helicone.ai/settings/keys)
+  </Step>
+  
+  <Step title="Configure Providers">
+    Add API keys for OpenAI, Anthropic, Google, or other providers
+  </Step>
+  
+  <Step title="Use the Gateway">
+    The gateway automatically prioritizes your keys (BYOK) over PTB:
+    
+    ```typescript
+    // Same code - gateway uses your keys automatically
+    const response = await client.chat.completions.create({
+      model: "claude-sonnet-4",
+      messages: [{ role: "user", content: "Hello!" }],
+    });
+    ```
+  </Step>
+</Steps>
+
+## Streaming Responses
+
+The gateway fully supports streaming:
+
+<Tabs>
+  <Tab title="TypeScript/JavaScript">
+    ```typescript
+    const stream = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: "Write a haiku about coding" }],
+      stream: true,
+    });
+
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || "";
+      process.stdout.write(content);
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Python">
+    ```python
+    stream = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": "Write a haiku about coding"}],
+        stream=True,
+    )
+
+    for chunk in stream:
+        content = chunk.choices[0].delta.content or ""
+        print(content, end="")
+    ```
+  </Tab>
+</Tabs>
+
+## Configuration Headers
+
+Customize gateway behavior with request headers:
+
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+  defaultHeaders: {
+    // Tag requests for filtering
+    "Helicone-Property-Environment": "production",
+    "Helicone-Property-User": "user-123",
+    
+    // Enable caching (see /gateway/caching)
+    "Helicone-Cache-Enabled": "true",
+    
+    // Rate limiting (see /gateway/rate-limiting)
+    "Helicone-RateLimit-Policy": "100;w=60;s=user",
+  },
+});
+```
+
+## Common Use Cases
+
+<AccordionGroup>
+  <Accordion title="Multi-Model Requests" icon="diagram-project">
+    Request multiple models with automatic fallback:
+    
+    ```typescript
+    const response = await client.chat.completions.create({
+      // Try GPT-4o first, fall back to Claude, then Gemini
+      model: "gpt-4o,claude-sonnet-4,gemini-2.0-flash",
+      messages: [{ role: "user", content: "Hello!" }],
+    });
+    ```
+    
+    Learn more in [Routing](/gateway/routing).
+  </Accordion>
+  
+  <Accordion title="Cost Optimization" icon="piggy-bank">
+    Use caching to reduce costs:
+    
+    ```typescript
+    const client = new OpenAI({
+      baseURL: "https://ai-gateway.helicone.ai",
+      apiKey: process.env.HELICONE_API_KEY,
+      defaultHeaders: {
+        "Helicone-Cache-Enabled": "true",
+      },
+    });
+    ```
+    
+    Learn more in [Caching](/gateway/caching).
+  </Accordion>
+  
+  <Accordion title="User Tracking" icon="users">
+    Track requests by user:
+    
+    ```typescript
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: "Hello!" }],
+    }, {
+      headers: {
+        "Helicone-User-Id": "user-123",
+      },
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Error Handling
+
+Handle errors gracefully:
+
+```typescript
+try {
+  const response = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Hello!" }],
+  });
+  
+  console.log(response.choices[0].message.content);
+} catch (error) {
+  if (error.status === 429) {
+    console.error("Rate limited or insufficient credits");
+  } else if (error.status === 401) {
+    console.error("Invalid API key");
+  } else {
+    console.error("Request failed:", error.message);
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Intelligent Routing" icon="route" href="/gateway/routing">
+    Learn how to route across multiple providers
+  </Card>
+  <Card title="Automatic Fallbacks" icon="shield-halved" href="/gateway/fallbacks">
+    Configure fallback chains for reliability
+  </Card>
+  <Card title="Request Caching" icon="database" href="/gateway/caching">
+    Reduce costs with intelligent caching
+  </Card>
+  <Card title="Rate Limiting" icon="gauge-high" href="/gateway/rate-limiting">
+    Control usage with rate limits
+  </Card>
+</CardGroup>
+
+## Get Help
+
+- **Documentation**: [docs.helicone.ai](https://docs.helicone.ai)
+- **Discord**: [Join our community](https://discord.gg/helicone)
+- **Email**: [help@helicone.ai](mailto:help@helicone.ai)
+- **GitHub**: [Report issues](https://github.com/helicone/helicone)

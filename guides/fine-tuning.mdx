@@ -1,0 +1,481 @@
+---
+title: Fine-Tuning Models with Helicone Data
+description: Export your Helicone request data to fine-tune custom models and improve performance
+---
+
+# Fine-Tuning Models with Helicone Data
+
+Learn how to export your logged requests from Helicone and use them to fine-tune custom models for better performance, lower costs, or specialized tasks.
+
+## Why Fine-Tune?
+
+Fine-tuning a model on your production data can provide:
+
+- **Better performance**: Customize models for your specific use case
+- **Lower costs**: Use smaller, fine-tuned models instead of large general models
+- **Consistent outputs**: Train models to follow your desired output format
+- **Domain expertise**: Specialize models for your industry or task
+
+<Note>
+  Helicone partners with [OpenPipe](https://openpipe.ai/) and [Autonomi](https://www.autonomi.ai/) for managed fine-tuning services.
+</Note>
+
+## Exporting Training Data
+
+### Export Requests via API
+
+Export your logged requests to create training datasets:
+
+```bash
+curl -X POST https://api.helicone.ai/v1/request/query \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filter": {
+      "request_created_at": {
+        "gte": "2024-01-01T00:00:00Z",
+        "lt": "2024-02-01T00:00:00Z"
+      },
+      "properties": {
+        "Feature": {
+          "equals": "customer-support"
+        }
+      }
+    },
+    "limit": 10000
+  }'
+```
+
+### Export High-Quality Examples
+
+Filter for your best examples:
+
+```bash
+# Export requests with positive feedback
+curl -X POST https://api.helicone.ai/v1/request/query \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filter": {
+      "feedback": {
+        "equals": true
+      },
+      "scores": {
+        "quality": {
+          "gte": 4
+        }
+      }
+    },
+    "limit": 5000
+  }'
+```
+
+### Filter by Custom Properties
+
+Export data for specific use cases:
+
+```typescript
+// Tag requests during production
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: prompt }],
+  headers: {
+    "Helicone-Property-Use-Case": "email-generation",
+    "Helicone-Property-Quality": "verified",
+  },
+});
+
+// Later export only verified email generation examples
+```
+
+## Preparing Training Data
+
+### Convert to JSONL Format
+
+Convert Helicone data to OpenAI's fine-tuning format:
+
+```python
+import requests
+import json
+
+# Fetch requests from Helicone
+response = requests.post(
+    "https://api.helicone.ai/v1/request/query",
+    headers={"Authorization": f"Bearer {HELICONE_API_KEY}"},
+    json={
+        "filter": {
+            "properties": {
+                "Use-Case": {"equals": "customer-support"}
+            }
+        },
+        "limit": 10000
+    }
+)
+
+requests_data = response.json()["data"]
+
+# Convert to fine-tuning format
+training_data = []
+for req in requests_data:
+    training_example = {
+        "messages": [
+            {"role": "system", "content": "You are a customer support assistant."},
+            {"role": "user", "content": req["request"]["messages"][-1]["content"]},
+            {"role": "assistant", "content": req["response"]["choices"][0]["message"]["content"]}
+        ]
+    }
+    training_data.append(training_example)
+
+# Save as JSONL
+with open("training_data.jsonl", "w") as f:
+    for example in training_data:
+        f.write(json.dumps(example) + "\n")
+
+print(f"Exported {len(training_data)} training examples")
+```
+
+### Data Quality Tips
+
+<AccordionGroup>
+  <Accordion title="Use High-Quality Examples" icon="star">
+    - Filter for requests with positive user feedback
+    - Include only examples with quality scores greater than 4/5
+    - Remove requests with errors or incomplete responses
+    - Manually review a sample of examples
+  </Accordion>
+  
+  <Accordion title="Balance Your Dataset" icon="scale-balanced">
+    - Include diverse examples covering all use cases
+    - Balance between different types of queries
+    - Avoid over-representing common but simple queries
+    - Include edge cases and challenging examples
+  </Accordion>
+  
+  <Accordion title="Clean and Format" icon="broom">
+    - Remove PII (personally identifiable information)
+    - Standardize formatting and structure
+    - Remove duplicate or near-duplicate examples
+    - Ensure consistent system prompts
+  </Accordion>
+  
+  <Accordion title="Size Requirements" icon="database">
+    Recommended dataset sizes:
+    - Minimum: 50-100 examples
+    - Good: 500-1,000 examples
+    - Ideal: 2,000-5,000+ examples
+    
+    More data generally leads to better results, but quality matters more than quantity.
+  </Accordion>
+</AccordionGroup>
+
+## Fine-Tuning with OpenAI
+
+### Upload Training Data
+
+```python
+from openai import OpenAI
+
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# Upload training file
+with open("training_data.jsonl", "rb") as f:
+    training_file = client.files.create(
+        file=f,
+        purpose="fine-tune"
+    )
+
+print(f"Uploaded training file: {training_file.id}")
+```
+
+### Create Fine-Tuning Job
+
+```python
+# Start fine-tuning
+fine_tune_job = client.fine_tuning.jobs.create(
+    training_file=training_file.id,
+    model="gpt-4o-mini-2024-07-18",
+    suffix="customer-support",  # Your model name suffix
+)
+
+print(f"Fine-tuning job created: {fine_tune_job.id}")
+```
+
+### Monitor Progress
+
+```python
+# Check status
+job = client.fine_tuning.jobs.retrieve(fine_tune_job.id)
+print(f"Status: {job.status}")
+
+# List events
+events = client.fine_tuning.jobs.list_events(fine_tune_job.id, limit=10)
+for event in events.data:
+    print(event.message)
+```
+
+### Use Fine-Tuned Model
+
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+const response = await client.chat.completions.create({
+  model: "ft:gpt-4o-mini-2024-07-18:company:customer-support:ABC123",
+  messages: [{ role: "user", content: "How do I reset my password?" }],
+  headers: {
+    "Helicone-Property-Model-Type": "fine-tuned",
+  },
+});
+```
+
+## Fine-Tuning Partners
+
+### OpenPipe Integration
+
+[OpenPipe](https://openpipe.ai/) provides managed fine-tuning with automatic data export:
+
+<Steps>
+  <Step title="Connect Helicone">
+    Link your Helicone account to OpenPipe
+  </Step>
+  
+  <Step title="Select Data">
+    Choose which requests to include in training
+  </Step>
+  
+  <Step title="Train Model">
+    OpenPipe automatically trains and deploys your model
+  </Step>
+  
+  <Step title="Use Model">
+    Access your fine-tuned model through Helicone's gateway
+  </Step>
+</Steps>
+
+### Autonomi Integration
+
+[Autonomi](https://www.autonomi.ai/) specializes in enterprise fine-tuning:
+
+- Automatic data curation from Helicone logs
+- Support for larger models and datasets
+- Advanced optimization techniques
+- Managed deployment and hosting
+
+<Note>
+  Contact [enterprise@helicone.ai](mailto:enterprise@helicone.ai) for partner integration setup.
+</Note>
+
+## Evaluating Fine-Tuned Models
+
+### Create Test Dataset
+
+Export a separate test set:
+
+```python
+# Export test data (separate from training)
+test_response = requests.post(
+    "https://api.helicone.ai/v1/request/query",
+    headers={"Authorization": f"Bearer {HELICONE_API_KEY}"},
+    json={
+        "filter": {
+            "request_created_at": {
+                "gte": "2024-02-01T00:00:00Z",
+                "lt": "2024-03-01T00:00:00Z"
+            }
+        },
+        "limit": 1000
+    }
+)
+```
+
+### Compare Models
+
+Use Helicone's experiments to compare base vs fine-tuned:
+
+```typescript
+// Test base model
+const baseResponse = await client.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [{ role: "user", content: testPrompt }],
+  headers: {
+    "Helicone-Property-Experiment": "base-vs-finetuned",
+    "Helicone-Property-Model-Version": "base",
+  },
+});
+
+// Test fine-tuned model
+const fineTunedResponse = await client.chat.completions.create({
+  model: "ft:gpt-4o-mini:company:suffix:id",
+  messages: [{ role: "user", content: testPrompt }],
+  headers: {
+    "Helicone-Property-Experiment": "base-vs-finetuned",
+    "Helicone-Property-Model-Version": "fine-tuned",
+  },
+});
+
+// Compare in Helicone dashboard
+```
+
+### Metrics to Track
+
+- **Quality**: Human evaluation or automated scoring
+- **Cost**: Compare costs per request
+- **Latency**: Response time comparison
+- **Task success rate**: Percentage of successful completions
+- **User satisfaction**: Feedback scores
+
+## Cost-Benefit Analysis
+
+### Calculate Potential Savings
+
+```python
+# Example: Fine-tuning GPT-4o-mini for customer support
+
+# Current costs (GPT-4o)
+current_cost_per_1k = 0.03  # $0.03 per 1K tokens
+average_tokens_per_request = 1000
+requests_per_month = 50000
+
+current_monthly_cost = (
+    requests_per_month *
+    (average_tokens_per_request / 1000) *
+    current_cost_per_1k
+)
+
+print(f"Current monthly cost: ${current_monthly_cost}")
+# Output: Current monthly cost: $1,500
+
+# Fine-tuned model costs (GPT-4o-mini fine-tuned)
+finetuned_cost_per_1k = 0.001  # $0.001 per 1K tokens (30x cheaper)
+finetuning_cost = 50  # One-time cost
+
+finetuned_monthly_cost = (
+    requests_per_month *
+    (average_tokens_per_request / 1000) *
+    finetuned_cost_per_1k
+)
+
+monthly_savings = current_monthly_cost - finetuned_monthly_cost
+break_even_month = finetuning_cost / monthly_savings
+
+print(f"Fine-tuned monthly cost: ${finetuned_monthly_cost}")
+print(f"Monthly savings: ${monthly_savings}")
+print(f"Break even after: {break_even_month:.1f} months")
+
+# Output:
+# Fine-tuned monthly cost: $50
+# Monthly savings: $1,450
+# Break even after: 0.0 months (immediate savings)
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Start Small" icon="seedling">
+    - Begin with 100-500 examples
+    - Test with a single use case
+    - Validate quality before scaling
+    - Gradually increase dataset size
+  </Accordion>
+  
+  <Accordion title="Continuous Improvement" icon="rotate">
+    - Regularly export new production data
+    - Retrain models quarterly or monthly
+    - A/B test new model versions
+    - Monitor performance metrics
+  </Accordion>
+  
+  <Accordion title="Version Control" icon="code-branch">
+    - Tag training data with version numbers
+    - Track which data was used for each model
+    - Document model performance changes
+    - Keep old models for rollback
+  </Accordion>
+  
+  <Accordion title="Quality Over Quantity" icon="star">
+    - Prioritize high-quality examples
+    - Remove low-quality or incorrect responses
+    - Balance dataset across use cases
+    - Manually review edge cases
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Poor Model Performance" icon="triangle-exclamation">
+    **Possible causes:**
+    - Insufficient training data (less than 100 examples)
+    - Low-quality training examples
+    - Unbalanced dataset
+    - Too much noise in data
+    
+    **Solutions:**
+    - Collect more high-quality examples
+    - Filter for positive feedback only
+    - Balance dataset across use cases
+    - Clean and validate training data
+  </Accordion>
+  
+  <Accordion title="Overfitting" icon="chart-line">
+    **Symptoms:**
+    - Great on training data, poor on new data
+    - Model too rigid or repetitive
+    - Fails on slight variations
+    
+    **Solutions:**
+    - Increase dataset diversity
+    - Reduce training epochs
+    - Add more varied examples
+    - Use regularization techniques
+  </Accordion>
+  
+  <Accordion title="High Costs" icon="dollar-sign">
+    **Symptoms:**
+    - Fine-tuning more expensive than expected
+    - Model inference costs higher than base
+    
+    **Solutions:**
+    - Reduce training dataset size
+    - Use smaller base model (mini vs full)
+    - Optimize prompt length
+    - Consider caching repeated queries
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Export Data"
+    icon="download"
+    href="/api-reference/requests/query"
+  >
+    Query API to export training data
+  </Card>
+  <Card
+    title="Datasets"
+    icon="database"
+    href="/evaluations/datasets"
+  >
+    Create and manage evaluation datasets
+  </Card>
+  <Card
+    title="Experiments"
+    icon="flask"
+    href="/evaluations/experiments"
+  >
+    Compare model performance
+  </Card>
+  <Card
+    title="Cost Tracking"
+    icon="dollar-sign"
+    href="/guides/cost-tracking"
+  >
+    Monitor fine-tuned model costs
+  </Card>
+</CardGroup>

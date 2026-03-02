@@ -1,0 +1,450 @@
+---
+title: "Intelligent Routing"
+description: "Route requests across multiple providers with automatic provider selection and model fallbacks"
+icon: "route"
+---
+
+Helicone's AI Gateway intelligently routes requests across providers based on availability, performance, and your configuration. Get automatic failover, cost optimization, and simplified multi-provider access.
+
+## How Routing Works
+
+When you request a model, the gateway:
+
+1. **Parses the model list** - Extracts comma-separated models from the `model` parameter
+2. **Builds routing attempts** - Creates a prioritized list of provider endpoints
+3. **Executes attempts** - Tries each endpoint until one succeeds
+4. **Maps responses** - Normalizes provider responses to OpenAI format
+
+```typescript
+// worker/src/lib/ai-gateway/AttemptBuilder.ts
+// The gateway creates routing attempts for each model:
+// 1. BYOK (your keys) attempts - highest priority
+// 2. PTB (Helicone's keys) attempts - fallback
+// 3. Sorted by provider priority (configurable)
+```
+
+## Multi-Model Requests
+
+Request multiple models with automatic fallback using comma-separated model names:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import OpenAI from "openai";
+
+    const client = new OpenAI({
+      baseURL: "https://ai-gateway.helicone.ai",
+      apiKey: process.env.HELICONE_API_KEY,
+    });
+
+    const response = await client.chat.completions.create({
+      // Try GPT-4o first, then Claude, then Gemini
+      model: "gpt-4o,claude-sonnet-4,gemini-2.0-flash",
+      messages: [
+        { role: "user", content: "What is the capital of France?" }
+      ],
+    });
+
+    console.log(response.choices[0].message.content);
+    // The response indicates which model was used
+    console.log(response.model); // e.g., "gpt-4o" or "claude-sonnet-4"
+    ```
+  </Tab>
+  
+  <Tab title="Python">
+    ```python
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url="https://ai-gateway.helicone.ai",
+        api_key="YOUR_HELICONE_API_KEY"
+    )
+
+    response = client.chat.completions.create(
+        # Try GPT-4o first, then Claude, then Gemini
+        model="gpt-4o,claude-sonnet-4,gemini-2.0-flash",
+        messages=[
+            {"role": "user", "content": "What is the capital of France?"}
+        ],
+    )
+
+    print(response.choices[0].message.content)
+    # The response indicates which model was used
+    print(response.model)  # e.g., "gpt-4o" or "claude-sonnet-4"
+    ```
+  </Tab>
+  
+  <Tab title="cURL">
+    ```bash
+    curl https://ai-gateway.helicone.ai/v1/chat/completions \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer YOUR_HELICONE_API_KEY" \
+      -d '{
+        "model": "gpt-4o,claude-sonnet-4,gemini-2.0-flash",
+        "messages": [
+          {
+            "role": "user",
+            "content": "What is the capital of France?"
+          }
+        ]
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+## Provider Specification
+
+Explicitly route to a specific provider using the format `model_name/provider`:
+
+```typescript
+// Route Claude to Anthropic specifically
+const response = await client.chat.completions.create({
+  model: "claude-sonnet-4/anthropic",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+
+// Route Llama to Together AI
+const response = await client.chat.completions.create({
+  model: "llama-3.3-70b/together",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+
+// Route Gemini to Google AI Studio (not Vertex AI)
+const response = await client.chat.completions.create({
+  model: "gemini-2.0-flash/google-ai-studio",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+## Provider Exclusion
+
+Exclude specific providers from routing using the `!provider` syntax:
+
+```typescript
+// Try all providers for GPT-4o EXCEPT OpenAI
+const response = await client.chat.completions.create({
+  model: "gpt-4o,!openai",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+
+// Try Claude from any provider except Anthropic
+const response = await client.chat.completions.create({
+  model: "claude-sonnet-4,!anthropic",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+
+// Combine multiple exclusions
+const response = await client.chat.completions.create({
+  model: "llama-3.3-70b,!openai,!anthropic",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+<Note>
+Global provider exclusions apply to all models in the list.
+</Note>
+
+## Routing Priority
+
+The gateway prioritizes attempts in this order:
+
+1. **BYOK (Bring Your Own Key)** - Your configured provider keys
+2. **PTB (Pay Through Billing)** - Helicone's provider keys
+3. **Provider priority** - Some providers are prioritized over others
+4. **Model order** - Earlier models in the comma-separated list are tried first
+
+```typescript
+// worker/src/lib/ai-gateway/AttemptBuilder.ts:176-187
+// For each model, the gateway builds attempts:
+const [byokAttempts, ptbAttempts] = await Promise.all([
+  this.buildByokAttempts(
+    modelSpec,
+    providerData,
+    orgId,
+    bodyMapping,
+    plugins
+  ),
+  this.buildPtbAttempts(modelSpec, providerData, bodyMapping, plugins),
+]);
+
+return [...byokAttempts, ...ptbAttempts];
+```
+
+### Example Priority Order
+
+For `model: "claude-sonnet-4,gpt-4o"`:
+
+1. Claude via your Anthropic key (BYOK)
+2. Claude via Helicone's key (PTB) 
+3. GPT-4o via your OpenAI key (BYOK)
+4. GPT-4o via Helicone's key (PTB)
+
+## Cost-Aware Routing
+
+Route to cheaper models first for cost optimization:
+
+```typescript
+// Try cheaper models first, expensive ones as fallback
+const response = await client.chat.completions.create({
+  model: "gpt-4o-mini,gpt-4o,claude-sonnet-4",
+  messages: [{ role: "user", content: "Simple question" }],
+});
+
+// For production: use fast, cheap models with premium fallbacks
+const response = await client.chat.completions.create({
+  model: "gemini-2.0-flash,claude-sonnet-4,gpt-4o",
+  messages: [{ role: "user", content: userMessage }],
+});
+```
+
+## Provider-Specific Routing
+
+Some models are available from multiple providers. Route strategically:
+
+<Tabs>
+  <Tab title="Llama Models">
+    ```typescript
+    // Available from: Meta, Together, Groq, OpenRouter, etc.
+    const response = await client.chat.completions.create({
+      // Try Groq first (fastest), then Together (cheaper), then OpenRouter
+      model: "llama-3.3-70b/groq,llama-3.3-70b/together,llama-3.3-70b/openrouter",
+      messages: [{ role: "user", content: "Hello!" }],
+    });
+    ```
+  </Tab>
+  
+  <Tab title="DeepSeek Models">
+    ```typescript
+    // Available from: DeepSeek, Together, OpenRouter, etc.
+    const response = await client.chat.completions.create({
+      // Try native API first, then aggregators
+      model: "deepseek-chat/deepseek,deepseek-chat/together",
+      messages: [{ role: "user", content: "Hello!" }],
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Gemini Models">
+    ```typescript
+    // Available from: Google AI Studio, Vertex AI
+    const response = await client.chat.completions.create({
+      // AI Studio is simpler, Vertex has enterprise features
+      model: "gemini-2.0-flash/google-ai-studio,gemini-2.0-flash/vertex",
+      messages: [{ role: "user", content: "Hello!" }],
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Regional Routing
+
+Some providers offer regional endpoints for compliance:
+
+```typescript
+// Use Azure OpenAI for EU data residency
+const response = await client.chat.completions.create({
+  model: "gpt-4o/azure",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+
+// Vertex AI for Google Cloud regions
+const response = await client.chat.completions.create({
+  model: "gemini-2.0-flash/vertex",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+<Note>
+Configure regional endpoints in your provider keys at [helicone.ai/settings/keys](https://helicone.ai/settings/keys).
+</Note>
+
+## Debugging Routing Decisions
+
+View which provider was used in the response and logs:
+
+```typescript
+const response = await client.chat.completions.create({
+  model: "gpt-4o,claude-sonnet-4,gemini-2.0-flash",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+
+// Check which model actually responded
+console.log("Model used:", response.model);
+
+// View detailed routing in Helicone dashboard
+// Each attempt is logged with:
+// - Source: e.g., "gpt-4o/openai/byok" or "claude-sonnet-4/anthropic/ptb"
+// - Status: success, rate_limited, insufficient_credits, etc.
+// - Error messages if failed
+```
+
+In the Helicone dashboard, you'll see:
+
+- All routing attempts made
+- Which attempt succeeded
+- Failure reasons for failed attempts
+- Provider latencies
+
+## Load Balancing
+
+For high-volume applications, distribute load across providers:
+
+```typescript
+// Balance between providers to avoid rate limits
+const providers = [
+  "gpt-4o/openai",
+  "claude-sonnet-4/anthropic", 
+  "gemini-2.0-flash/google-ai-studio"
+];
+
+const randomProvider = providers[Math.floor(Math.random() * providers.length)];
+
+const response = await client.chat.completions.create({
+  model: randomProvider,
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+## Routing Errors
+
+Handle routing failures gracefully:
+
+```typescript
+try {
+  const response = await client.chat.completions.create({
+    model: "gpt-4o,claude-sonnet-4",
+    messages: [{ role: "user", content: "Hello!" }],
+  });
+} catch (error) {
+  // All routing attempts failed
+  if (error.status === 500) {
+    console.error("All providers failed:", error.message);
+    // error.details contains info about each failed attempt
+  }
+  
+  // Insufficient credits for PTB
+  if (error.status === 429) {
+    console.error("Rate limited or out of credits");
+  }
+}
+```
+
+Error responses include details about failed attempts:
+
+```json
+{
+  "error": {
+    "code": "all_attempts_failed",
+    "message": "All attempts failed",
+    "details": [
+      {
+        "source": "gpt-4o/openai/byok",
+        "message": "Invalid API key",
+        "statusCode": 401
+      },
+      {
+        "source": "claude-sonnet-4/anthropic/ptb",
+        "message": "Insufficient credits",
+        "statusCode": 429
+      }
+    ]
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Include Fallbacks" icon="shield-halved">
+    List multiple models to ensure high availability:
+    
+    ```typescript
+    // Good: Multiple fallbacks
+    model: "gpt-4o,claude-sonnet-4,gemini-2.0-flash"
+    
+    // Risky: Single model with no fallback
+    model: "gpt-4o"
+    ```
+  </Accordion>
+  
+  <Accordion title="Order by Cost" icon="piggy-bank">
+    Put cheaper models first to minimize costs:
+    
+    ```typescript
+    // Cost-optimized ordering
+    model: "gpt-4o-mini,gpt-4o,claude-sonnet-4"
+    ```
+  </Accordion>
+  
+  <Accordion title="Consider Latency" icon="gauge-high">
+    For real-time apps, prioritize fast providers:
+    
+    ```typescript
+    // Fast providers first
+    model: "groq/llama-3.3-70b,together/llama-3.3-70b"
+    ```
+  </Accordion>
+  
+  <Accordion title="Configure BYOK" icon="key">
+    Add your provider keys for priority routing and billing control:
+    
+    - Higher priority than PTB
+    - Direct provider billing
+    - No Helicone credit usage
+    
+    Configure at [helicone.ai/settings/keys](https://helicone.ai/settings/keys)
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Configuration
+
+### Custom Provider Keys by Model
+
+Use different API keys for different models:
+
+```typescript
+// Configure multiple OpenAI keys at helicone.ai/settings/keys
+// Tag them with custom UIDs:
+// - "openai-key-1" for gpt-4o
+// - "openai-key-2" for gpt-4o-mini
+
+const response = await client.chat.completions.create({
+  model: "gpt-4o/openai/openai-key-1",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+### Provider Registry
+
+The gateway maintains a registry of all providers and models:
+
+```typescript
+// View available models
+// GET https://ai-gateway.helicone.ai/v1/models
+
+const response = await fetch("https://ai-gateway.helicone.ai/v1/models", {
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`
+  }
+});
+
+const models = await response.json();
+console.log(models.data); // Array of available models
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Automatic Fallbacks" icon="arrows-turn-to-dots" href="/gateway/fallbacks">
+    Configure advanced fallback logic with custom headers
+  </Card>
+  <Card title="Request Caching" icon="database" href="/gateway/caching">
+    Cache responses to reduce redundant routing
+  </Card>
+  <Card title="Rate Limiting" icon="gauge-high" href="/gateway/rate-limiting">
+    Control request rates across providers
+  </Card>
+  <Card title="Model List" icon="list" href="https://helicone.ai/models">
+    Browse all available models and providers
+  </Card>
+</CardGroup>

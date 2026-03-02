@@ -1,0 +1,426 @@
+---
+title: Building AI Agents with Helicone
+description: Monitor and debug complex AI agent workflows with session tracking and distributed tracing
+---
+
+# Building AI Agents with Helicone
+
+Learn how to monitor multi-step AI agent workflows, track tool calls, and debug complex agent behavior using Helicone's observability features.
+
+## What You'll Learn
+
+In this guide, you'll learn how to:
+- Track agent sessions and conversation flows
+- Monitor tool calls and function executions
+- Debug agent decision-making processes
+- Analyze agent performance and costs
+- Implement error handling for agents
+
+## Prerequisites
+
+<Note>
+  This guide assumes you have:
+  - Basic understanding of AI agents and LangChain/LlamaIndex
+  - Helicone account and API key
+  - An agent application to monitor
+</Note>
+
+## Agent Session Tracking
+
+### Setting Up Session Tracking
+
+Track your agent's entire conversation flow using session IDs:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import OpenAI from "openai";
+    
+    const client = new OpenAI({
+      baseURL: "https://ai-gateway.helicone.ai",
+      apiKey: process.env.HELICONE_API_KEY,
+    });
+    
+    // Create a unique session for this agent interaction
+    const sessionId = `agent-${Date.now()}`;
+    
+    async function runAgent(userQuery: string) {
+      // Step 1: Analyze the query
+      const analysis = await client.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "user", content: `Analyze: ${userQuery}` }],
+        headers: {
+          "Helicone-Session-Id": sessionId,
+          "Helicone-Session-Name": "Query Analysis",
+          "Helicone-Session-Path": "/agent/analyze",
+        },
+      });
+      
+      // Step 2: Execute actions
+      const execution = await client.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "user", content: `Execute: ${analysis}` }],
+        headers: {
+          "Helicone-Session-Id": sessionId,
+          "Helicone-Session-Name": "Action Execution",
+          "Helicone-Session-Path": "/agent/execute",
+        },
+      });
+      
+      return execution;
+    }
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    from openai import OpenAI
+    import time
+    
+    client = OpenAI(
+        base_url="https://ai-gateway.helicone.ai",
+        api_key=os.getenv("HELICONE_API_KEY"),
+    )
+    
+    # Create a unique session for this agent interaction
+    session_id = f"agent-{int(time.time())}"
+    
+    def run_agent(user_query: str):
+        # Step 1: Analyze the query
+        analysis = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": f"Analyze: {user_query}"}],
+            extra_headers={
+                "Helicone-Session-Id": session_id,
+                "Helicone-Session-Name": "Query Analysis",
+                "Helicone-Session-Path": "/agent/analyze",
+            },
+        )
+        
+        # Step 2: Execute actions
+        execution = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": f"Execute: {analysis}"}],
+            extra_headers={
+                "Helicone-Session-Id": session_id,
+                "Helicone-Session-Name": "Action Execution",
+                "Helicone-Session-Path": "/agent/execute",
+            },
+        )
+        
+        return execution
+    ```
+  </Tab>
+</Tabs>
+
+### Hierarchical Session Paths
+
+Use hierarchical paths to organize complex agent workflows:
+
+```typescript
+const paths = [
+  "/agent",                    // Root level
+  "/agent/plan",              // Planning phase
+  "/agent/plan/research",     // Research sub-task
+  "/agent/execute",           // Execution phase
+  "/agent/execute/validate",  // Validation sub-task
+];
+```
+
+## Tracking Tool Calls
+
+### Monitor Function Executions
+
+Track when your agent calls external tools or functions:
+
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+async function agentWithTools(query: string) {
+  const tools = [
+    {
+      type: "function",
+      function: {
+        name: "search_database",
+        description: "Search the product database",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string" },
+          },
+        },
+      },
+    },
+  ];
+  
+  const response = await client.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: query }],
+    tools,
+    headers: {
+      "Helicone-Session-Id": "agent-tools",
+      "Helicone-Property-Agent-Type": "tool-calling",
+    },
+  });
+  
+  // Tool calls are automatically tracked in Helicone
+  return response;
+}
+```
+
+## Custom Properties for Agent Metadata
+
+Add metadata to track agent-specific information:
+
+```typescript
+const headers = {
+  "Helicone-Session-Id": sessionId,
+  "Helicone-Property-Agent-Type": "ReAct",
+  "Helicone-Property-User-Id": userId,
+  "Helicone-Property-Task-Type": "research",
+  "Helicone-Property-Complexity": "high",
+};
+```
+
+## Debugging Agent Behavior
+
+### View Agent Flow in Dashboard
+
+1. Navigate to **Sessions** in the Helicone dashboard
+2. Find your agent session by ID or name
+3. View the hierarchical flow of all requests
+4. Inspect inputs, outputs, and tool calls
+5. Check token usage and costs per step
+
+### Analyze Agent Performance
+
+Query agent metrics using the API:
+
+```bash
+curl -X POST https://api.helicone.ai/v1/session/query \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filter": {
+      "properties": {
+        "Agent-Type": {
+          "equals": "ReAct"
+        }
+      }
+    },
+    "limit": 100
+  }'
+```
+
+## Cost Tracking for Agents
+
+### Monitor Agent Costs
+
+Track costs across all agent sessions:
+
+```typescript
+// Add cost tracking to agent requests
+const headers = {
+  "Helicone-Session-Id": sessionId,
+  "Helicone-Property-User-Id": userId,
+  "Helicone-Property-Agent-Type": "customer-support",
+};
+
+// View costs in dashboard filtered by agent type
+```
+
+### Set Cost Alerts
+
+<Steps>
+  <Step title="Create alert rule">
+    Go to **Settings** → **Alerts** in the dashboard
+  </Step>
+  <Step title="Configure threshold">
+    Set cost thresholds per session or per user
+  </Step>
+  <Step title="Set notification">
+    Configure webhook or email notifications
+  </Step>
+</Steps>
+
+## Error Handling for Agents
+
+### Implement Fallbacks
+
+```typescript
+async function robustAgentCall(query: string) {
+  try {
+    return await client.chat.completions.create({
+      model: "gpt-4o,claude-sonnet-4", // Fallback to Claude
+      messages: [{ role: "user", content: query }],
+      headers: {
+        "Helicone-Session-Id": sessionId,
+        "Helicone-Retry-Enabled": "true",
+      },
+    });
+  } catch (error) {
+    // Log error with custom property
+    console.error("Agent failed:", error);
+    throw error;
+  }
+}
+```
+
+### Track Error Rates
+
+Monitor agent failures in the dashboard:
+- Filter by status code (4xx, 5xx)
+- View error messages and stack traces
+- Analyze failure patterns by agent type
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Descriptive Session Names" icon="tag">
+    Name sessions based on the user's intent:
+    - "Customer Support - Refund Request"
+    - "Research Agent - Market Analysis"
+    - "Code Review - PR #123"
+  </Accordion>
+  
+  <Accordion title="Implement Hierarchical Paths" icon="sitemap">
+    Organize agent steps with clear paths:
+    ```
+    /agent
+    /agent/understand
+    /agent/plan
+    /agent/execute
+    /agent/verify
+    ```
+  </Accordion>
+  
+  <Accordion title="Add Rich Metadata" icon="database">
+    Include relevant properties:
+    - User ID for cost allocation
+    - Task type for analysis
+    - Complexity level for performance tracking
+    - Environment (dev/staging/prod)
+  </Accordion>
+  
+  <Accordion title="Monitor Cost Per Session" icon="dollar-sign">
+    Track costs at the session level to understand:
+    - Average cost per agent interaction
+    - Cost by user or customer
+    - Cost trends over time
+  </Accordion>
+</AccordionGroup>
+
+## Common Agent Patterns
+
+### ReAct Agent Pattern
+
+```typescript
+async function reactAgent(task: string) {
+  const sessionId = `react-${Date.now()}`;
+  let step = 0;
+  
+  while (step < 5) {
+    // Reasoning step
+    const thought = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: `Think about: ${task}` }],
+      headers: {
+        "Helicone-Session-Id": sessionId,
+        "Helicone-Session-Path": `/react/step${step}/thought`,
+      },
+    });
+    
+    // Action step
+    const action = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: `Act on: ${thought}` }],
+      headers: {
+        "Helicone-Session-Id": sessionId,
+        "Helicone-Session-Path": `/react/step${step}/action`,
+      },
+    });
+    
+    step++;
+  }
+}
+```
+
+### Multi-Agent Collaboration
+
+```typescript
+async function multiAgentSystem(task: string) {
+  const sessionId = `multi-agent-${Date.now()}`;
+  
+  // Agent 1: Researcher
+  const research = await client.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: `Research: ${task}` }],
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Property-Agent-Role": "researcher",
+      "Helicone-Session-Path": "/multi/research",
+    },
+  });
+  
+  // Agent 2: Writer
+  const content = await client.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: `Write based on: ${research}` }],
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Property-Agent-Role": "writer",
+      "Helicone-Session-Path": "/multi/write",
+    },
+  });
+  
+  // Agent 3: Reviewer
+  const review = await client.chat.completions.create({
+    model: "claude-sonnet-4",
+    messages: [{ role: "user", content: `Review: ${content}` }],
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Property-Agent-Role": "reviewer",
+      "Helicone-Session-Path": "/multi/review",
+    },
+  });
+  
+  return review;
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Session Tracking"
+    icon="diagram-project"
+    href="/observability/sessions"
+  >
+    Learn more about session tracking features
+  </Card>
+  <Card
+    title="Custom Properties"
+    icon="tags"
+    href="/observability/custom-properties"
+  >
+    Add metadata to your agent requests
+  </Card>
+  <Card
+    title="Cost Tracking"
+    icon="dollar-sign"
+    href="/observability/cost-tracking"
+  >
+    Monitor and optimize agent costs
+  </Card>
+  <Card
+    title="Evaluations"
+    icon="chart-line"
+    href="/evaluations/overview"
+  >
+    Evaluate agent performance and quality
+  </Card>
+</CardGroup>

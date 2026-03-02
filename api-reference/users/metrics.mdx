@@ -1,0 +1,140 @@
+---
+title: 'User Metrics Overview'
+api: 'POST https://api.helicone.ai/v1/user/metrics-overview/query'
+description: 'Get aggregated user metrics with percentile statistics'
+---
+
+## Overview
+
+Retrieve high-level user metrics including percentile statistics for requests, costs, and token usage.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Your Helicone API key. Format: `Bearer YOUR_API_KEY`
+</ParamField>
+
+## Request Body
+
+<ParamField body="filter" type="object" required>
+  Filter criteria for users
+</ParamField>
+
+<ParamField body="pSize" type="string" required>
+  Percentile size: `p50`, `p75`, `p95`, `p99`, or `p99.9`
+</ParamField>
+
+<ParamField body="useInterquartile" type="boolean" required>
+  Use interquartile range for outlier filtering
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="object">
+  Aggregated user metrics
+  
+  <Expandable title="metrics properties">
+    <ResponseField name="total_users" type="number">
+      Total number of users
+    </ResponseField>
+    <ResponseField name="total_requests" type="number">
+      Total requests across all users
+    </ResponseField>
+    <ResponseField name="total_cost" type="number">
+      Total cost in USD
+    </ResponseField>
+    <ResponseField name="avg_requests_per_user" type="number">
+      Average requests per user
+    </ResponseField>
+    <ResponseField name="percentile_cost" type="number">
+      Cost at specified percentile
+    </ResponseField>
+    <ResponseField name="percentile_requests" type="number">
+      Requests at specified percentile
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if request failed
+</ResponseField>
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.helicone.ai/v1/user/metrics-overview/query \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "filter": {},
+    "pSize": "p95",
+    "useInterquartile": false
+  }'
+```
+
+```python Python
+import requests
+
+url = "https://api.helicone.ai/v1/user/metrics-overview/query"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json"
+}
+
+payload = {
+    "filter": {},
+    "pSize": "p95",
+    "useInterquartile": False
+}
+
+response = requests.post(url, json=payload, headers=headers)
+data = response.json()
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.helicone.ai/v1/user/metrics-overview/query',
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      filter: {},
+      pSize: 'p95',
+      useInterquartile: false,
+    }),
+  }
+);
+
+const data = await response.json();
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200 Success
+{
+  "data": {
+    "total_users": 250,
+    "total_requests": 50000,
+    "total_cost": 750.50,
+    "avg_requests_per_user": 200,
+    "percentile_cost": 5.25,
+    "percentile_requests": 450
+  },
+  "error": null
+}
+```
+
+```json 400 Error
+{
+  "data": null,
+  "error": "Failed to fetch user metrics"
+}
+```
+
+</ResponseExample>

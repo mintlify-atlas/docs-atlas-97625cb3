@@ -1,0 +1,170 @@
+---
+title: 'Prompt Versions'
+api: 'POST https://api.helicone.ai/v1/prompt/{promptId}/versions/query'
+description: 'Get all versions of a specific prompt'
+---
+
+## Overview
+
+Retrieve version history for a prompt, including template changes and metadata.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Your Helicone API key. Format: `Bearer YOUR_API_KEY`
+</ParamField>
+
+## Path Parameters
+
+<ParamField path="promptId" type="string" required>
+  The unique identifier of the prompt
+</ParamField>
+
+## Request Body
+
+<ParamField body="filter" type="object">
+  Filter criteria for versions (optional, use `{}` or omit for all versions)
+</ParamField>
+
+<ParamField body="includeExperimentVersions" type="boolean">
+  Include experimental prompt versions
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="array">
+  Array of prompt version objects
+  
+  <Expandable title="version object">
+    <ResponseField name="id" type="string">
+      Version ID
+    </ResponseField>
+    <ResponseField name="minor_version" type="number">
+      Minor version number
+    </ResponseField>
+    <ResponseField name="major_version" type="number">
+      Major version number
+    </ResponseField>
+    <ResponseField name="prompt_v2" type="string">
+      Parent prompt ID
+    </ResponseField>
+    <ResponseField name="model" type="string">
+      Model specified in template
+    </ResponseField>
+    <ResponseField name="helicone_template" type="string">
+      Full prompt template
+    </ResponseField>
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    <ResponseField name="updated_at" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    <ResponseField name="metadata" type="object">
+      Version metadata
+    </ResponseField>
+    <ResponseField name="parent_prompt_version" type="string">
+      Parent version ID (if forked)
+    </ResponseField>
+    <ResponseField name="experiment_id" type="string">
+      Associated experiment ID
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if request failed
+</ResponseField>
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.helicone.ai/v1/prompt/prompt_abc123/versions/query \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "filter": {},
+    "includeExperimentVersions": false
+  }'
+```
+
+```python Python
+import requests
+
+url = "https://api.helicone.ai/v1/prompt/prompt_abc123/versions/query"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json"
+}
+payload = {
+    "filter": {},
+    "includeExperimentVersions": False
+}
+
+response = requests.post(url, json=payload, headers=headers)
+data = response.json()
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.helicone.ai/v1/prompt/prompt_abc123/versions/query',
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      filter: {},
+      includeExperimentVersions: false,
+    }),
+  }
+);
+
+const data = await response.json();
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200 Success
+{
+  "data": [
+    {
+      "id": "pv_xyz789",
+      "minor_version": 1,
+      "major_version": 2,
+      "prompt_v2": "prompt_abc123",
+      "model": "gpt-4",
+      "helicone_template": {
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a helpful assistant."
+          }
+        ]
+      },
+      "created_at": "2024-02-15T10:00:00Z",
+      "updated_at": "2024-02-15T10:00:00Z",
+      "metadata": {
+        "label": "production"
+      },
+      "parent_prompt_version": null,
+      "experiment_id": null
+    }
+  ],
+  "error": null
+}
+```
+
+```json 500 Error
+{
+  "data": null,
+  "error": "Failed to fetch prompt versions"
+}
+```
+
+</ResponseExample>

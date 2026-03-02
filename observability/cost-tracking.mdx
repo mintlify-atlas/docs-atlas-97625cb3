@@ -1,0 +1,743 @@
+---
+title: "Cost Tracking"
+sidebarTitle: "Cost Tracking"
+description: "Monitor and analyze costs across models, users, and time with precise cost breakdowns"
+"twitter:title": "Cost Tracking - Helicone OSS LLM Observability"
+---
+
+import QuestionsSection from "/snippets/questions-section.mdx";
+
+## Overview
+
+Helicone automatically calculates and tracks costs for every LLM request. With support for 100+ models across OpenAI, Anthropic, Google, and other providers, you get precise cost breakdowns including input tokens, output tokens, cached tokens, and more.
+
+## Why Cost Tracking Matters
+
+<CardGroup cols={2}>
+<Card title="Control Spending" icon="wallet">
+Monitor real-time costs to avoid unexpected bills and stay within budget
+</Card>
+
+<Card title="Optimize Usage" icon="chart-line">
+Identify expensive patterns and optimize model selection and prompts
+</Card>
+
+<Card title="Bill Customers" icon="receipt">
+Track per-user costs for accurate customer billing and chargeback
+</Card>
+
+<Card title="Forecast Costs" icon="crystal-ball">
+Analyze trends to predict future spending and plan budgets
+</Card>
+</CardGroup>
+
+## Cost Calculation
+
+Helicone automatically calculates costs based on:
+
+### Token-Based Costs
+
+- **Input tokens**: Cost of tokens in the prompt
+- **Output tokens**: Cost of tokens in the completion
+- **Cached input tokens**: Discounted cost for cached prompts (Anthropic, OpenAI, etc.)
+- **Thinking tokens**: Cost for reasoning tokens (o1, o3 models)
+- **Cache write tokens**: Cost for writing to prompt cache (5min and 1hr TTLs)
+
+### Modality Costs
+
+- **Image tokens**: Vision model input/output costs
+- **Audio tokens**: Audio model input/output costs
+- **Video tokens**: Video model processing costs
+- **File tokens**: Document processing costs
+
+### Additional Costs
+
+- **Web search**: Search API call costs (Perplexity)
+- **Request cost**: Per-request pricing (some providers)
+
+### Cost Breakdown Structure
+
+```typescript
+interface CostBreakdown {
+  inputCost: number;              // Standard input token cost
+  outputCost: number;             // Standard output token cost
+  cachedInputCost: number;        // Cached token cost (discounted)
+  cacheWrite5mCost: number;       // Cost to write 5min cache
+  cacheWrite1hCost: number;       // Cost to write 1hr cache
+  thinkingCost: number;           // Reasoning token cost (o1, o3)
+  webSearchCost: number;          // Search API costs
+  requestCost: number;            // Per-request fees
+  
+  // Per-modality breakdowns
+  image?: ModalityCostBreakdown;
+  audio?: ModalityCostBreakdown;
+  video?: ModalityCostBreakdown;
+  file?: ModalityCostBreakdown;
+  
+  totalCost: number;              // Sum of all costs
+}
+
+interface ModalityCostBreakdown {
+  inputCost: number;
+  cachedInputCost: number;
+  outputCost: number;
+}
+```
+
+## Viewing Costs
+
+### In the Dashboard
+
+1. **Dashboard Overview**: See total costs and trends at a glance
+2. **Requests Page**: View cost for each individual request
+3. **Models Page**: Compare costs across different models
+4. **Users Page**: See per-user cost breakdowns
+5. **Custom Properties**: Segment costs by any property (feature, environment, etc.)
+
+### Request-Level Costs
+
+Every request shows detailed cost information:
+
+- Total cost for the request
+- Input token cost
+- Output token cost
+- Cached token savings
+- Cost per 1K tokens
+
+## Querying Costs via API
+
+### Get Total Cost
+
+<CodeGroup>
+```typescript Node.js
+const response = await fetch("https://api.helicone.ai/v1/metrics/totalCost", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    filter: {}, // No filter = all requests
+    timeFilter: {
+      start: "2024-01-01T00:00:00Z",
+      end: "2024-01-31T23:59:59Z",
+    },
+  }),
+});
+
+const { data: totalCost } = await response.json();
+console.log(`Total cost: $${totalCost}`);
+```
+
+```python Python
+import requests
+import os
+
+response = requests.post(
+    "https://api.helicone.ai/v1/metrics/totalCost",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('HELICONE_API_KEY')}",
+        "Content-Type": "application/json",
+    },
+    json={
+        "filter": {},
+        "timeFilter": {
+            "start": "2024-01-01T00:00:00Z",
+            "end": "2024-01-31T23:59:59Z",
+        },
+    },
+)
+
+data = response.json()
+print(f"Total cost: ${data['data']}")
+```
+</CodeGroup>
+
+### Get Costs Over Time
+
+```typescript
+const response = await fetch("https://api.helicone.ai/v1/metrics/costOverTime", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    filter: {},
+    timeFilter: {
+      start: "2024-01-01T00:00:00Z",
+      end: "2024-01-31T23:59:59Z",
+    },
+    dbIncrement: "day", // or "hour", "week", "month"
+    timeZoneDifference: 0,
+  }),
+});
+
+const { data: costsOverTime } = await response.json();
+// Returns: [{ time: "2024-01-01", cost: 12.34 }, ...]
+```
+
+### Filter Costs by Property
+
+```typescript
+const response = await fetch("https://api.helicone.ai/v1/metrics/totalCost", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    filter: {
+      request_response_rmt: {
+        properties: {
+          "Feature": {
+            equals: "chat",
+          },
+        },
+      },
+    },
+    timeFilter: {
+      start: "2024-01-01T00:00:00Z",
+      end: "2024-01-31T23:59:59Z",
+    },
+  }),
+});
+
+const { data: featureCost } = await response.json();
+console.log(`Chat feature cost: $${featureCost}`);
+```
+
+## Cost Segmentation
+
+### By Model
+
+Compare costs across different models:
+
+```typescript
+const response = await fetch("https://api.helicone.ai/v1/metrics/modelMetrics", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    filter: {},
+    timeFilter: {
+      start: "2024-01-01T00:00:00Z",
+      end: "2024-01-31T23:59:59Z",
+    },
+    offset: 0,
+    limit: 50,
+  }),
+});
+
+const { data: modelMetrics } = await response.json();
+// Returns: [{ model: "gpt-4o", cost: 123.45, requests: 1000 }, ...]
+```
+
+### By User
+
+Track costs per user:
+
+```typescript
+const response = await fetch("https://api.helicone.ai/v1/metrics/totalCost", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    filter: {
+      request_response_rmt: {
+        user_id: {
+          equals: "user_123",
+        },
+      },
+    },
+    timeFilter: {
+      start: "2024-01-01T00:00:00Z",
+      end: "2024-01-31T23:59:59Z",
+    },
+  }),
+});
+
+const { data: userCost } = await response.json();
+console.log(`User cost: $${userCost}`);
+```
+
+### By Property
+
+Segment costs by custom properties:
+
+```typescript
+const response = await fetch(
+  "https://api.helicone.ai/v1/property/Feature/top-costs/query",
+  {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      timeFilter: {
+        start: "2024-01-01T00:00:00Z",
+        end: "2024-01-31T23:59:59Z",
+      },
+    }),
+  }
+);
+
+const { data: topCosts } = await response.json();
+// Returns: [{ value: "chat", cost: 123.45 }, { value: "summarize", cost: 67.89 }, ...]
+```
+
+## Cost Optimization Strategies
+
+<Tabs>
+<Tab title="Model Selection">
+Use cheaper models for simpler tasks:
+
+```typescript
+function selectModel(taskComplexity: "simple" | "medium" | "complex") {
+  const models = {
+    simple: "gpt-4o-mini",      // $0.15/$0.60 per 1M tokens
+    medium: "gpt-4o",            // $2.50/$10 per 1M tokens
+    complex: "claude-3-opus",    // $15/$75 per 1M tokens
+  };
+  
+  return models[taskComplexity];
+}
+
+// Simple task - use cheaper model
+const response = await client.chat.completions.create({
+  model: selectModel("simple"),
+  messages: [{ role: "user", content: "Summarize this in 3 words" }],
+});
+```
+</Tab>
+
+<Tab title="Prompt Caching">
+Use prompt caching to reduce costs for repeated prompts:
+
+```typescript
+// Anthropic prompt caching
+import Anthropic from "@anthropic-ai/sdk";
+
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  baseURL: "https://anthropic.helicone.ai",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+const response = await client.messages.create({
+  model: "claude-3-5-sonnet-20241022",
+  max_tokens: 1024,
+  system: [
+    {
+      type: "text",
+      text: "You are a helpful assistant...", // This will be cached
+      cache_control: { type: "ephemeral" },
+    },
+  ],
+  messages: [
+    { role: "user", content: "What is 2+2?" },
+  ],
+});
+
+// Subsequent requests reuse cached prompt at 90% discount
+// Input: $3/MTok -> Cached: $0.30/MTok
+```
+</Tab>
+
+<Tab title="Token Optimization">
+Reduce token usage with concise prompts:
+
+```typescript
+// Expensive - verbose prompt
+const verbosePrompt = `
+I would like you to please help me by analyzing the following text.
+Please take your time and provide a comprehensive analysis.
+Make sure to cover all the important points and provide detailed insights.
+
+Text: ${userInput}
+
+Thank you for your help!
+`;
+
+// Better - concise prompt
+const concisePrompt = `Analyze this text: ${userInput}`;
+
+// Save ~80% on input tokens
+const response = await client.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [{ role: "user", content: concisePrompt }],
+});
+```
+</Tab>
+
+<Tab title="Output Length Limits">
+Limit output tokens to control costs:
+
+```typescript
+// Control max output length
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: "Write a summary" }],
+  max_tokens: 100, // Limit output to 100 tokens
+});
+
+// Provides predictable costs:
+// Max cost = (input_tokens * $2.50 + 100 * $10) / 1M
+```
+</Tab>
+
+<Tab title="Batch Processing">
+Use batch APIs for non-urgent tasks:
+
+```typescript
+// Regular API - immediate processing
+const regularCost = 0.01; // $0.01 per request
+
+// Batch API - 50% discount, 24hr delay
+const batchCost = 0.005; // $0.005 per request
+
+// For non-urgent tasks like:
+// - Overnight processing
+// - Bulk analysis
+// - Training data generation
+```
+</Tab>
+
+<Tab title="Smart Caching">
+Cache responses for repeated queries:
+
+```typescript
+const cache = new Map<string, string>();
+
+async function getCachedCompletion(prompt: string) {
+  // Check cache first
+  if (cache.has(prompt)) {
+    console.log("Cache hit - $0 cost");
+    return cache.get(prompt);
+  }
+  
+  // Cache miss - make API call
+  const response = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: prompt }],
+  });
+  
+  const completion = response.choices[0].message.content;
+  cache.set(prompt, completion);
+  
+  return completion;
+}
+
+// 100% cost savings on cache hits
+```
+</Tab>
+</Tabs>
+
+## Cost Alerts
+
+### Set Budget Alerts
+
+Create alerts when costs exceed thresholds:
+
+```typescript
+interface BudgetAlert {
+  name: string;
+  threshold: number;  // in dollars
+  period: "day" | "week" | "month";
+  filters?: any;
+}
+
+async function checkBudgetAlert(alert: BudgetAlert) {
+  const startTime = getPeriodStart(alert.period);
+  
+  const response = await fetch("https://api.helicone.ai/v1/metrics/totalCost", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      filter: alert.filters || {},
+      timeFilter: {
+        start: startTime.toISOString(),
+        end: new Date().toISOString(),
+      },
+    }),
+  });
+  
+  const { data: cost } = await response.json();
+  
+  if (cost >= alert.threshold) {
+    await sendAlert({
+      title: `Budget Alert: ${alert.name}`,
+      message: `Cost $${cost.toFixed(2)} exceeded threshold $${alert.threshold}`,
+      severity: "warning",
+    });
+  }
+}
+
+// Check alerts periodically
+const alerts: BudgetAlert[] = [
+  { name: "Daily Budget", threshold: 100, period: "day" },
+  { name: "Monthly Budget", threshold: 3000, period: "month" },
+  { name: "Production Costs", threshold: 500, period: "day", filters: {
+    request_response_rmt: {
+      properties: { "Environment": { equals: "production" } }
+    }
+  }},
+];
+
+setInterval(() => {
+  alerts.forEach(alert => checkBudgetAlert(alert));
+}, 60 * 60 * 1000); // Check every hour
+```
+
+## Best Practices
+
+<AccordionGroup>
+<Accordion title="Monitor Costs Regularly">
+Set up daily/weekly cost reviews:
+
+```typescript
+async function dailyCostReport() {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  yesterday.setHours(0, 0, 0, 0);
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const response = await fetch("https://api.helicone.ai/v1/metrics/totalCost", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      filter: {},
+      timeFilter: {
+        start: yesterday.toISOString(),
+        end: today.toISOString(),
+      },
+    }),
+  });
+  
+  const { data: cost } = await response.json();
+  console.log(`Yesterday's cost: $${cost}`);
+  
+  // Send to Slack/email
+  await sendCostReport(cost);
+}
+```
+</Accordion>
+
+<Accordion title="Tag Requests by Cost Center">
+Use properties to allocate costs:
+
+```typescript
+headers: {
+  "Helicone-Property-Cost-Center": "engineering",
+  "Helicone-Property-Project": "chatbot-v2",
+  "Helicone-Property-Department": "product",
+}
+
+// Later, get costs by cost center
+const engineeringCosts = await getCostsByProperty("Cost-Center", "engineering");
+```
+</Accordion>
+
+<Accordion title="Use Model Routing">
+Automatically route to cheaper models when possible:
+
+```typescript
+function routeToModel(prompt: string, urgency: "low" | "high") {
+  // For non-urgent, simple tasks
+  if (urgency === "low" && prompt.length < 500) {
+    return "gpt-4o-mini"; // Cheaper
+  }
+  
+  // For urgent or complex tasks
+  return "gpt-4o"; // More capable but expensive
+}
+```
+</Accordion>
+
+<Accordion title="Track Cost per Feature">
+Measure ROI of AI features:
+
+```typescript
+// Tag all requests by feature
+headers: {
+  "Helicone-Property-Feature": featureName,
+}
+
+// Monthly feature cost analysis
+async function featureCostAnalysis() {
+  const features = ["chat", "summarize", "translate", "code-review"];
+  
+  for (const feature of features) {
+    const cost = await getFeatureCost(feature);
+    const usage = await getFeatureUsage(feature);
+    
+    console.log(`${feature}: $${cost} (${usage} users)`);
+    console.log(`Cost per user: $${(cost / usage).toFixed(2)}`);
+  }
+}
+```
+</Accordion>
+</AccordionGroup>
+
+## Common Use Cases
+
+<Tabs>
+<Tab title="Customer Billing">
+**Scenario**: Bill customers based on their AI usage.
+
+```typescript
+async function generateMonthlyInvoice(userId: string, billingPeriod: { start: Date; end: Date }) {
+  // Get user's costs
+  const costResponse = await fetch("https://api.helicone.ai/v1/metrics/totalCost", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      filter: {
+        request_response_rmt: {
+          user_id: { equals: userId },
+        },
+      },
+      timeFilter: {
+        start: billingPeriod.start.toISOString(),
+        end: billingPeriod.end.toISOString(),
+      },
+    }),
+  });
+  
+  const { data: cost } = await costResponse.json();
+  
+  // Get request count
+  const countResponse = await fetch("https://api.helicone.ai/v1/request/count/query", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      filter: {
+        request_response_rmt: {
+          user_id: { equals: userId },
+        },
+      },
+    }),
+  });
+  
+  const { data: requestCount } = await countResponse.json();
+  
+  // Calculate markup (e.g., 2x cost)
+  const markup = 2.0;
+  const customerPrice = cost * markup;
+  
+  return {
+    userId,
+    period: billingPeriod,
+    requests: requestCount,
+    cost: cost,
+    price: customerPrice,
+    margin: customerPrice - cost,
+  };
+}
+```
+</Tab>
+
+<Tab title="Cost Anomaly Detection">
+**Scenario**: Detect unusual cost spikes.
+
+```typescript
+async function detectCostAnomalies() {
+  // Get last 30 days of costs
+  const response = await fetch("https://api.helicone.ai/v1/metrics/costOverTime", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      filter: {},
+      timeFilter: {
+        start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        end: new Date().toISOString(),
+      },
+      dbIncrement: "day",
+      timeZoneDifference: 0,
+    }),
+  });
+  
+  const { data: dailyCosts } = await response.json();
+  
+  // Calculate average and standard deviation
+  const costs = dailyCosts.map(d => d.cost);
+  const avg = costs.reduce((a, b) => a + b, 0) / costs.length;
+  const stdDev = Math.sqrt(
+    costs.map(c => Math.pow(c - avg, 2)).reduce((a, b) => a + b, 0) / costs.length
+  );
+  
+  // Check if today's cost is anomalous (> 2 std devs)
+  const todayCost = costs[costs.length - 1];
+  if (todayCost > avg + 2 * stdDev) {
+    await sendAlert({
+      title: "Cost Anomaly Detected",
+      message: `Today's cost $${todayCost.toFixed(2)} is ${((todayCost / avg - 1) * 100).toFixed(0)}% above average`,
+      severity: "critical",
+    });
+  }
+}
+```
+</Tab>
+</Tabs>
+
+## Supported Models
+
+Helicone tracks costs for 100+ models including:
+
+- **OpenAI**: GPT-4o, GPT-4o-mini, o1, o3, o3-mini, and more
+- **Anthropic**: Claude 3 Opus, Sonnet, Haiku, and Claude 3.5
+- **Google**: Gemini Pro, Flash, and Gemini 1.5
+- **Mistral**: Mistral Large, Medium, Small
+- **Groq**: Llama models with Groq inference
+- **Cohere**: Command, Embed models
+- **Many more**: See [Model Registry](/features/models) for full list
+
+<Info>
+Custom or fine-tuned models are supported - Helicone uses provider pricing data to calculate costs accurately.
+</Info>
+
+## Related Features
+
+<CardGroup cols={2}>
+<Card title="User Metrics" icon="users" href="/observability/user-metrics">
+Track costs per user for billing and analytics
+</Card>
+
+<Card title="Requests" icon="message" href="/observability/requests">
+View detailed cost breakdown for each request
+</Card>
+
+<Card title="Custom Properties" icon="tag" href="/observability/custom-properties">
+Segment costs by properties like feature or environment
+</Card>
+
+<Card title="Sessions" icon="diagram-project" href="/observability/sessions">
+Track costs for complete workflows and conversations
+</Card>
+</CardGroup>
+
+<QuestionsSection />

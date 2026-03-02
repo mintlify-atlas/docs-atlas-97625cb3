@@ -1,0 +1,589 @@
+---
+title: Kubernetes Deployment
+description: Deploy Helicone to Kubernetes using Helm for production-grade deployments
+---
+
+Deploy Helicone to Kubernetes for production workloads with high availability, scalability, and enterprise features.
+
+## Overview
+
+Helicone provides a production-ready Helm chart for Kubernetes deployments. This is the recommended approach for:
+
+- **Production environments** requiring high availability
+- **Enterprise deployments** with compliance requirements
+- **Multi-region** deployments
+- **Teams** needing advanced monitoring and autoscaling
+
+<Note>
+  The Helm chart is available to enterprise customers. Contact [enterprise@helicone.ai](mailto:enterprise@helicone.ai) for access.
+</Note>
+
+## Architecture
+
+The Kubernetes deployment includes:
+
+<CardGroup cols={2}>
+  <Card title="Stateless Services" icon="server">
+    - Jawn API servers (horizontal scaling)
+    - Web dashboard (horizontal scaling)
+    - Worker pods (one per proxy type)
+  </Card>
+  <Card title="Stateful Services" icon="database">
+    - PostgreSQL (StatefulSet or external)
+    - ClickHouse (StatefulSet or external)
+    - Redis (StatefulSet)
+  </Card>
+  <Card title="Storage" icon="box">
+    - MinIO (StatefulSet) or external S3
+    - Persistent volumes for databases
+  </Card>
+  <Card title="Networking" icon="network-wired">
+    - Ingress controller for HTTPS
+    - Service mesh (optional)
+    - Network policies
+  </Card>
+</CardGroup>
+
+## Prerequisites
+
+<Steps>
+  <Step title="Kubernetes Cluster">
+    A running Kubernetes cluster (version 1.24+):
+    - **GKE**: `gcloud container clusters create helicone --num-nodes=3`
+    - **EKS**: `eksctl create cluster --name=helicone --nodes=3`
+    - **AKS**: `az aks create --name helicone --node-count 3`
+    - **Self-managed**: Ensure you have at least 3 worker nodes
+  </Step>
+
+  <Step title="kubectl">
+    Configured to access your cluster:
+    
+    ```bash
+    kubectl cluster-info
+    kubectl get nodes
+    ```
+  </Step>
+
+  <Step title="Helm 3">
+    Install Helm 3 if not already installed:
+    
+    ```bash
+    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    helm version
+    ```
+  </Step>
+
+  <Step title="Storage Class">
+    Ensure your cluster has a default StorageClass for persistent volumes:
+    
+    ```bash
+    kubectl get storageclass
+    ```
+  </Step>
+</Steps>
+
+## Minimum Resource Requirements
+
+### Development/Testing
+- **Nodes**: 3 nodes (2 vCPU, 8GB RAM each)
+- **Storage**: 100GB total
+
+### Production
+- **Nodes**: 5+ nodes (4 vCPU, 16GB RAM each)
+- **Storage**: 500GB+ for ClickHouse
+- **Load Balancer**: For ingress
+
+## Installation
+
+<Warning>
+  The Helm chart is currently available only to enterprise customers. Contact [enterprise@helicone.ai](mailto:enterprise@helicone.ai) to request access.
+</Warning>
+
+### Basic Installation
+
+<Steps>
+  <Step title="Add Helm repository">
+    ```bash
+    # Contact enterprise@helicone.ai for repository credentials
+    helm repo add helicone https://charts.helicone.ai
+    helm repo update
+    ```
+  </Step>
+
+  <Step title="Create namespace">
+    ```bash
+    kubectl create namespace helicone
+    ```
+  </Step>
+
+  <Step title="Create values file">
+    Create `values.yaml` with your configuration:
+    
+    ```yaml
+    # values.yaml
+    global:
+      domain: helicone.yourdomain.com
+      
+    auth:
+      secret: "your-super-secret-auth-key-min-32-characters"
+      
+    database:
+      # Use external PostgreSQL (recommended)
+      external:
+        enabled: true
+        host: your-postgres-host.com
+        port: 5432
+        database: helicone
+        username: helicone_user
+        password: your-secure-password
+      
+      # Or use in-cluster PostgreSQL
+      internal:
+        enabled: false
+        persistence:
+          size: 100Gi
+          
+    clickhouse:
+      # Use external ClickHouse (recommended)
+      external:
+        enabled: true
+        host: your-clickhouse-host.com
+        port: 8123
+        username: default
+        password: your-clickhouse-password
+      
+      # Or use in-cluster ClickHouse
+      internal:
+        enabled: false
+        persistence:
+          size: 500Gi
+          
+    storage:
+      # Use S3 (recommended)
+      type: s3
+      s3:
+        endpoint: https://s3.amazonaws.com
+        region: us-east-1
+        accessKey: YOUR_ACCESS_KEY
+        secretKey: YOUR_SECRET_KEY
+        buckets:
+          requests: helicone-requests
+          prompts: helicone-prompts
+      
+      # Or use in-cluster MinIO
+      minio:
+        enabled: false
+        persistence:
+          size: 200Gi
+          
+    jawn:
+      replicas: 3
+      resources:
+        requests:
+          cpu: 500m
+          memory: 1Gi
+        limits:
+          cpu: 2000m
+          memory: 4Gi
+      autoscaling:
+        enabled: true
+        minReplicas: 3
+        maxReplicas: 10
+        targetCPU: 70
+        
+    web:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: 1000m
+          memory: 2Gi
+          
+    ingress:
+      enabled: true
+      className: nginx
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-prod
+      tls:
+        enabled: true
+        secretName: helicone-tls
+    ```
+  </Step>
+
+  <Step title="Install chart">
+    ```bash
+    helm install helicone helicone/helicone \
+      --namespace helicone \
+      --values values.yaml \
+      --wait
+    ```
+  </Step>
+
+  <Step title="Verify deployment">
+    ```bash
+    # Check pod status
+    kubectl get pods -n helicone
+    
+    # Check services
+    kubectl get svc -n helicone
+    
+    # Check ingress
+    kubectl get ingress -n helicone
+    ```
+  </Step>
+</Steps>
+
+## Configuration Options
+
+### High Availability
+
+For production HA setup:
+
+```yaml
+# values.yaml
+jawn:
+  replicas: 3
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - jawn
+          topologyKey: kubernetes.io/hostname
+
+web:
+  replicas: 2
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+```
+
+### Autoscaling
+
+Enable Horizontal Pod Autoscaling:
+
+```yaml
+jawn:
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+web:
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+```
+
+### TLS/HTTPS
+
+With cert-manager:
+
+```yaml
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: helicone.yourdomain.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: helicone-tls
+      hosts:
+        - helicone.yourdomain.com
+```
+
+### Monitoring
+
+Integrate with Prometheus:
+
+```yaml
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  grafana:
+    enabled: true
+    dashboards:
+      enabled: true
+```
+
+### Network Policies
+
+Enable network isolation:
+
+```yaml
+networkPolicies:
+  enabled: true
+  ingress:
+    enabled: true
+  egress:
+    enabled: true
+    allowDNS: true
+    allowExternal: true
+```
+
+## Using External Services
+
+### External PostgreSQL (Recommended)
+
+<Tabs>
+  <Tab title="AWS RDS">
+    ```yaml
+    database:
+      external:
+        enabled: true
+        host: helicone-db.abc123.us-east-1.rds.amazonaws.com
+        port: 5432
+        database: helicone
+        username: helicone_admin
+        # Store password in Kubernetes secret
+        existingSecret: helicone-db-secret
+        secretKey: password
+    ```
+    
+    Create the secret:
+    ```bash
+    kubectl create secret generic helicone-db-secret \
+      --from-literal=password='your-db-password' \
+      -n helicone
+    ```
+  </Tab>
+
+  <Tab title="Google Cloud SQL">
+    ```yaml
+    database:
+      external:
+        enabled: true
+        host: /cloudsql/project:region:instance
+        port: 5432
+        database: helicone
+        username: helicone_admin
+        existingSecret: helicone-db-secret
+        secretKey: password
+        
+    # Enable Cloud SQL Proxy
+    cloudSqlProxy:
+      enabled: true
+      instances:
+        - project:region:instance
+    ```
+  </Tab>
+
+  <Tab title="Azure Database">
+    ```yaml
+    database:
+      external:
+        enabled: true
+        host: helicone-db.postgres.database.azure.com
+        port: 5432
+        database: helicone
+        username: helicone_admin@helicone-db
+        sslMode: require
+        existingSecret: helicone-db-secret
+        secretKey: password
+    ```
+  </Tab>
+</Tabs>
+
+### External ClickHouse
+
+```yaml
+clickhouse:
+  external:
+    enabled: true
+    host: clickhouse.yourdomain.com
+    port: 8123
+    username: helicone_user
+    database: helicone
+    existingSecret: clickhouse-secret
+    secretKey: password
+    secure: true  # Use HTTPS
+```
+
+### External S3 Storage
+
+```yaml
+storage:
+  type: s3
+  s3:
+    endpoint: https://s3.amazonaws.com
+    region: us-east-1
+    buckets:
+      requests: helicone-requests-prod
+      prompts: helicone-prompts-prod
+    # Use IAM role (recommended)
+    useIRSA: true
+    serviceAccount:
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/helicone-s3-role
+    # Or use access keys
+    accessKey: YOUR_ACCESS_KEY
+    existingSecret: aws-s3-secret
+    secretKey: secretKey
+```
+
+## Operations
+
+### View Logs
+
+```bash
+# Jawn logs
+kubectl logs -f -n helicone -l app=jawn
+
+# Web logs
+kubectl logs -f -n helicone -l app=web
+
+# All pods
+kubectl logs -f -n helicone --all-containers=true
+```
+
+### Scale Services
+
+```bash
+# Scale Jawn to 5 replicas
+kubectl scale deployment helicone-jawn -n helicone --replicas=5
+
+# Scale Web to 3 replicas
+kubectl scale deployment helicone-web -n helicone --replicas=3
+```
+
+### Update Configuration
+
+```bash
+# Edit values.yaml, then upgrade
+helm upgrade helicone helicone/helicone \
+  --namespace helicone \
+  --values values.yaml \
+  --wait
+```
+
+### Rollback
+
+```bash
+# View release history
+helm history helicone -n helicone
+
+# Rollback to previous version
+helm rollback helicone -n helicone
+
+# Rollback to specific revision
+helm rollback helicone 3 -n helicone
+```
+
+### Backup
+
+```bash
+# Backup databases before upgrades
+kubectl exec -n helicone helicone-postgres-0 -- \
+  pg_dump -U postgres helicone > backup.sql
+
+# Backup ClickHouse
+kubectl exec -n helicone helicone-clickhouse-0 -- \
+  clickhouse-client --query "BACKUP DATABASE helicone TO Disk('backups', 'backup.zip')"
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Pods not starting" icon="circle-exclamation">
+    Check pod events and logs:
+    
+    ```bash
+    kubectl describe pod <pod-name> -n helicone
+    kubectl logs <pod-name> -n helicone
+    
+    # Check resource constraints
+    kubectl top nodes
+    kubectl top pods -n helicone
+    ```
+  </Accordion>
+
+  <Accordion title="Database connection issues" icon="database">
+    Verify database connectivity:
+    
+    ```bash
+    # Test from a pod
+    kubectl run -it --rm debug --image=postgres:15 -n helicone -- \
+      psql "postgresql://user:pass@host:5432/helicone"
+    
+    # Check secrets
+    kubectl get secret helicone-db-secret -n helicone -o yaml
+    ```
+  </Accordion>
+
+  <Accordion title="Ingress not working" icon="globe">
+    Check ingress status:
+    
+    ```bash
+    kubectl describe ingress helicone -n helicone
+    kubectl logs -n ingress-nginx -l app.kubernetes.io/name=ingress-nginx
+    
+    # Verify DNS
+    nslookup helicone.yourdomain.com
+    ```
+  </Accordion>
+
+  <Accordion title="Storage issues" icon="box">
+    Check PVC status:
+    
+    ```bash
+    kubectl get pvc -n helicone
+    kubectl describe pvc <pvc-name> -n helicone
+    
+    # Check storage class
+    kubectl get storageclass
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Upgrading
+
+```bash
+# Update Helm repo
+helm repo update
+
+# Check for new versions
+helm search repo helicone/helicone --versions
+
+# Upgrade to latest
+helm upgrade helicone helicone/helicone \
+  --namespace helicone \
+  --values values.yaml \
+  --wait
+
+# Upgrade to specific version
+helm upgrade helicone helicone/helicone \
+  --version 2.5.0 \
+  --namespace helicone \
+  --values values.yaml
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/self-hosting/configuration">
+    Detailed configuration reference
+  </Card>
+  <Card title="Enterprise Support" icon="headset" href="mailto:enterprise@helicone.ai">
+    Get help with your deployment
+  </Card>
+</CardGroup>

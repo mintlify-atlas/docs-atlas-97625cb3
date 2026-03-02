@@ -1,0 +1,633 @@
+---
+title: "Request Caching"
+description: "Cache AI responses to reduce costs, improve latency, and minimize provider API calls"
+icon: "database"
+---
+
+Helicone's caching system stores AI responses and serves them instantly for identical requests, dramatically reducing costs and latency.
+
+## How Caching Works
+
+When caching is enabled:
+
+1. **Request arrives** - Gateway generates a cache key from request content
+2. **Cache lookup** - Checks if response exists in cache
+3. **Cache hit** - Returns cached response instantly (no provider call)
+4. **Cache miss** - Calls provider, stores response, returns result
+
+```typescript
+// worker/src/lib/util/cache/cacheFunctions.ts:142-211
+// Cache lookup with timeout protection:
+const { requests: requestCaches, freeIndexes } = await Promise.race([
+  getMaxCachedResponses(request, settings, cacheKv, cacheSeed),
+  new Promise((resolve, reject) =>
+    setTimeout(() => reject(new Error("Cache timeout")), CACHE_TIMEOUT)
+  ),
+]);
+
+if (freeIndexes.length > 0) {
+  return null; // Cache miss
+} else {
+  // Cache hit - return random cached response
+  const randomCache = requestCaches[Math.floor(Math.random() * requestCaches.length)];
+  return new Response(cachedStream, { headers: cachedResponseHeaders });
+}
+```
+
+## Enabling Caching
+
+### Simple Caching
+
+Enable caching with a single header:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import OpenAI from "openai";
+
+    const client = new OpenAI({
+      baseURL: "https://ai-gateway.helicone.ai",
+      apiKey: process.env.HELICONE_API_KEY,
+      defaultHeaders: {
+        "Helicone-Cache-Enabled": "true",
+      },
+    });
+
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "user", content: "What is the capital of France?" }
+      ],
+    });
+
+    // First request: calls provider (MISS)
+    // Second identical request: returns cached (HIT)
+    ```
+  </Tab>
+  
+  <Tab title="Python">
+    ```python
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url="https://ai-gateway.helicone.ai",
+        api_key="YOUR_HELICONE_API_KEY",
+        default_headers={
+            "Helicone-Cache-Enabled": "true",
+        }
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "user", "content": "What is the capital of France?"}
+        ],
+    )
+
+    # First request: calls provider (MISS)
+    # Second identical request: returns cached (HIT)
+    ```
+  </Tab>
+</Tabs>
+
+### Per-Request Caching
+
+Enable caching for specific requests:
+
+```typescript
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+// Cache this request
+const response = await client.chat.completions.create(
+  {
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Static query" }],
+  },
+  {
+    headers: {
+      "Helicone-Cache-Enabled": "true",
+    },
+  }
+);
+
+// Don't cache this request
+const response2 = await client.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [{ role: "user", content: "Dynamic query" }],
+});
+```
+
+## Cache Headers
+
+### Basic Headers
+
+<ParamField header="Helicone-Cache-Enabled" type="boolean" default="false">
+  Enable caching for requests and responses
+  
+  ```typescript
+  "Helicone-Cache-Enabled": "true"
+  ```
+</ParamField>
+
+<ParamField header="Cache-Control" type="string">
+  Standard HTTP cache control header. Supports `max-age` and `s-maxage`:
+  
+  ```typescript
+  // Cache for 1 hour (3600 seconds)
+  "Cache-Control": "max-age=3600"
+  
+  // Cache for 24 hours
+  "Cache-Control": "max-age=86400"
+  ```
+</ParamField>
+
+### Advanced Headers
+
+<ParamField header="Helicone-Cache-Bucket-Max-Size" type="number" default="1">
+  Number of variations to cache. Useful for non-deterministic responses:
+  
+  ```typescript
+  // Cache up to 5 different responses for the same request
+  "Helicone-Cache-Bucket-Max-Size": "5"
+  ```
+  
+  When serving cached responses, a random variation is returned.
+</ParamField>
+
+<ParamField header="Helicone-Cache-Seed" type="string">
+  Cache key seed for cache isolation:
+  
+  ```typescript
+  // Separate caches for different users
+  "Helicone-Cache-Seed": "user-123"
+  
+  // Separate caches for different environments
+  "Helicone-Cache-Seed": "production"
+  ```
+</ParamField>
+
+## Cache Key Generation
+
+The cache key is generated from:
+
+1. **Request URL** - The full endpoint URL
+2. **Request body** - The complete request payload
+3. **Cache headers** - `Helicone-Cache-*` headers
+4. **Auth header** - Authorization (except Google short-lived tokens)
+5. **Cache seed** - Custom seed if provided
+6. **Bucket index** - For bucket-based caching
+
+```typescript
+// worker/src/lib/util/cache/cacheFunctions.ts:33-66
+export async function kvKeyFromRequest(
+  request: HeliconeProxyRequest,
+  freeIndex: number,
+  cacheSeed: string | null
+): Promise<string> {
+  const headers = new Headers();
+  for (const [key, value] of request.requestWrapper.getHeaders().entries()) {
+    if (key.toLowerCase().startsWith("helicone-cache")) {
+      headers.set(key, value);
+    }
+    if (key.toLowerCase() === "authorization" && !isGoogleAuthHeader(value)) {
+      headers.set(key, value);
+    }
+  }
+  
+  const body = tryGetBodyAndRemoveKeys(
+    await request.requestWrapper.unsafeGetBodyText(),
+    ignoreKeys
+  );
+
+  return await hash(
+    (cacheSeed ?? "") +
+      request.url +
+      body +
+      JSON.stringify([...headers.entries()]) +
+      (freeIndex >= 1 ? freeIndex.toString() : "")
+  );
+}
+```
+
+## Cache Behavior
+
+### Read-Only Caching
+
+Read from cache but don't write:
+
+```typescript
+const response = await client.chat.completions.create(
+  {
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Hello!" }],
+  },
+  {
+    headers: {
+      // Only read from cache, never write
+      "Helicone-Cache-Enabled": "false",
+      "Helicone-Cache-Read": "true",
+      "Helicone-Cache-Save": "false",
+    },
+  }
+);
+```
+
+### Write-Only Caching
+
+Write to cache but don't read (warm the cache):
+
+```typescript
+const response = await client.chat.completions.create(
+  {
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Hello!" }],
+  },
+  {
+    headers: {
+      // Only write to cache, never read
+      "Helicone-Cache-Enabled": "false",
+      "Helicone-Cache-Read": "false",
+      "Helicone-Cache-Save": "true",
+    },
+  }
+);
+```
+
+## Detecting Cache Hits
+
+Check if a response came from cache:
+
+```typescript
+// In browser/Node with fetch
+const response = await fetch("https://ai-gateway.helicone.ai/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${HELICONE_API_KEY}`,
+    "Helicone-Cache-Enabled": "true",
+  },
+  body: JSON.stringify({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Hello!" }],
+  }),
+});
+
+const cacheStatus = response.headers.get("Helicone-Cache");
+if (cacheStatus === "HIT") {
+  console.log("Response served from cache");
+  
+  // Get cache metrics
+  const bucketIdx = response.headers.get("Helicone-Cache-Bucket-Idx");
+  const latency = response.headers.get("Helicone-Cache-Latency");
+  console.log(`Cache bucket: ${bucketIdx}, Original latency: ${latency}ms`);
+} else {
+  console.log("Response from provider (cache miss)");
+}
+```
+
+Response headers:
+
+- `Helicone-Cache: HIT` - Response from cache
+- `Helicone-Cache: MISS` - Response from provider (implicit if header absent)
+- `Helicone-Cache-Bucket-Idx` - Which cache bucket was used (when bucket size > 1)
+- `Helicone-Cache-Latency` - Original provider latency in milliseconds
+
+## Bucket Caching
+
+For non-deterministic models (like those with `temperature > 0`), cache multiple variations:
+
+```typescript
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+  defaultHeaders: {
+    "Helicone-Cache-Enabled": "true",
+    // Cache up to 10 different responses
+    "Helicone-Cache-Bucket-Max-Size": "10",
+  },
+});
+
+const response = await client.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [{ role: "user", content: "Write a creative story" }],
+  temperature: 0.9, // High temperature = varied responses
+});
+
+// First 10 requests: call provider and cache each response
+// Subsequent requests: return random cached response
+```
+
+How it works:
+
+1. First request fills bucket slot 0
+2. Second request fills bucket slot 1
+3. Continues until all 10 slots filled
+4. Future requests return random response from the 10 cached
+
+<Note>
+Max bucket size is 100. Larger buckets use more storage and take longer to fill.
+</Note>
+
+## Cache Seeding
+
+Isolate caches by user, tenant, or environment:
+
+```typescript
+// User-specific caching
+const getUserResponse = async (userId: string) => {
+  return await client.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: "My dashboard" }],
+    },
+    {
+      headers: {
+        "Helicone-Cache-Enabled": "true",
+        "Helicone-Cache-Seed": userId,
+      },
+    }
+  );
+};
+
+// Each user gets their own cache
+const user1 = await getUserResponse("user-1");
+const user2 = await getUserResponse("user-2"); // Different cache
+```
+
+Common seeding strategies:
+
+<CodeGroup>
+```typescript User-based
+"Helicone-Cache-Seed": userId
+```
+
+```typescript Tenant-based  
+"Helicone-Cache-Seed": tenantId
+```
+
+```typescript Environment-based
+"Helicone-Cache-Seed": "production" // or "staging", "dev"
+```
+
+```typescript Version-based
+"Helicone-Cache-Seed": `v${appVersion}`
+```
+</CodeGroup>
+
+## Ignoring Keys
+
+Exclude specific request body keys from cache key generation:
+
+```typescript
+const response = await client.chat.completions.create(
+  {
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Hello!" }],
+    // These fields won't affect caching
+    user: "user-123",
+    metadata: { timestamp: Date.now() },
+  },
+  {
+    headers: {
+      "Helicone-Cache-Enabled": "true",
+      // Ignore these keys when generating cache key
+      "Helicone-Cache-Ignore-Keys": JSON.stringify(["user", "metadata"]),
+    },
+  }
+);
+
+// Requests with different user/metadata will still hit the same cache
+```
+
+Useful for:
+- Timestamps or request IDs
+- User tracking fields
+- Debug metadata
+- Analytics data
+
+## Cache Expiration
+
+Control how long responses are cached:
+
+```typescript
+// Cache for 1 hour
+const response = await client.chat.completions.create(
+  {
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Current weather" }],
+  },
+  {
+    headers: {
+      "Helicone-Cache-Enabled": "true",
+      "Cache-Control": "max-age=3600", // 1 hour in seconds
+    },
+  }
+);
+
+// Cache for 24 hours
+const response2 = await client.chat.completions.create(
+  {
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Static content" }],
+  },
+  {
+    headers: {
+      "Helicone-Cache-Enabled": "true",
+      "Cache-Control": "max-age=86400", // 24 hours
+    },
+  }
+);
+```
+
+<Info>
+Default cache expiration is 1 hour (3600 seconds) if not specified.
+</Info>
+
+## Use Cases
+
+### Static Content
+
+Cache responses that rarely change:
+
+```typescript
+// FAQ responses
+const faqResponse = await client.chat.completions.create(
+  {
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: "You are a helpful FAQ assistant" },
+      { role: "user", content: "How do I reset my password?" }
+    ],
+  },
+  {
+    headers: {
+      "Helicone-Cache-Enabled": "true",
+      "Cache-Control": "max-age=604800", // 1 week
+    },
+  }
+);
+```
+
+### Embeddings
+
+Cache embedding generations:
+
+```typescript
+const embedding = await client.embeddings.create(
+  {
+    model: "text-embedding-3-small",
+    input: "The quick brown fox jumps over the lazy dog",
+  },
+  {
+    headers: {
+      "Helicone-Cache-Enabled": "true",
+      "Cache-Control": "max-age=2592000", // 30 days
+    },
+  }
+);
+```
+
+Embeddings are deterministic and perfect for caching.
+
+### Product Descriptions
+
+Generate and cache product descriptions:
+
+```typescript
+const generateDescription = async (productId: string, productData: any) => {
+  return await client.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "Generate product descriptions" },
+        { role: "user", content: JSON.stringify(productData) }
+      ],
+      temperature: 0, // Deterministic for caching
+    },
+    {
+      headers: {
+        "Helicone-Cache-Enabled": "true",
+        "Helicone-Cache-Seed": productId,
+        "Cache-Control": "max-age=604800", // 1 week
+      },
+    }
+  );
+};
+```
+
+### Translation
+
+Cache translations for common phrases:
+
+```typescript
+const translate = async (text: string, targetLang: string) => {
+  return await client.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: `Translate to ${targetLang}` },
+        { role: "user", content: text }
+      ],
+      temperature: 0,
+    },
+    {
+      headers: {
+        "Helicone-Cache-Enabled": "true",
+        "Helicone-Cache-Seed": targetLang,
+      },
+    }
+  );
+};
+```
+
+## Cache Analytics
+
+Monitor cache performance in the Helicone dashboard:
+
+- **Cache hit rate** - Percentage of requests served from cache
+- **Cost savings** - Money saved from cached responses
+- **Latency improvement** - Speed improvement from cache hits
+
+View at [helicone.ai/cache](https://helicone.ai/cache).
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Low Temperature" icon="temperature-low">
+    Deterministic responses cache better:
+    
+    ```typescript
+    // Good for caching
+    temperature: 0
+    
+    // Use buckets for higher temperature
+    temperature: 0.7,
+    headers: { "Helicone-Cache-Bucket-Max-Size": "5" }
+    ```
+  </Accordion>
+  
+  <Accordion title="Set Appropriate TTL" icon="clock">
+    Match cache duration to content freshness:
+    
+    ```typescript
+    // Static content: long TTL
+    "Cache-Control": "max-age=604800" // 1 week
+    
+    // Dynamic content: short TTL  
+    "Cache-Control": "max-age=300" // 5 minutes
+    
+    // Real-time content: no cache
+    // Don't set Helicone-Cache-Enabled
+    ```
+  </Accordion>
+  
+  <Accordion title="Ignore Variable Fields" icon="filter">
+    Exclude fields that shouldn't affect caching:
+    
+    ```typescript
+    "Helicone-Cache-Ignore-Keys": JSON.stringify([
+      "user",
+      "metadata", 
+      "timestamp",
+      "request_id"
+    ])
+    ```
+  </Accordion>
+  
+  <Accordion title="Monitor Cache Hit Rate" icon="chart-line">
+    Track cache effectiveness:
+    
+    - High hit rate (greater than 50%) = good cache usage
+    - Low hit rate (less than 10%) = requests too unique
+    - Zero hits = check cache configuration
+  </Accordion>
+</AccordionGroup>
+
+## Limitations
+
+<Warning>
+- Maximum bucket size: 100
+- Cache timeout: 2 seconds
+- No cache for streaming responses during the stream (cached after completion)
+- Google short-lived auth tokens are not included in cache keys
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Intelligent Routing" icon="route" href="/gateway/routing">
+    Combine caching with multi-provider routing
+  </Card>
+  <Card title="Automatic Fallbacks" icon="shield-halved" href="/gateway/fallbacks">
+    Use caching with fallback chains
+  </Card>
+  <Card title="Rate Limiting" icon="gauge-high" href="/gateway/rate-limiting">
+    Control costs with rate limits and caching
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/gateway/quickstart">
+    Get started with the AI Gateway
+  </Card>
+</CardGroup>

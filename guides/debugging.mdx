@@ -1,0 +1,433 @@
+---
+title: Debugging LLM Applications
+description: Debug and troubleshoot LLM applications with request inspection, error tracking, and performance analysis
+---
+
+# Debugging LLM Applications
+
+Learn how to debug LLM applications using Helicone's observability features to identify and fix issues quickly.
+
+## Common Issues and Solutions
+
+<AccordionGroup>
+  <Accordion title="Unexpected Model Outputs" icon="exclamation-triangle">
+    **Problem:** Model returns unexpected or incorrect responses
+    
+    **Debug Steps:**
+    1. View the exact prompt sent to the model in Helicone dashboard
+    2. Check if input was properly formatted
+    3. Review system messages and context
+    4. Test with different models
+    5. Adjust temperature and other parameters
+    
+    ```typescript
+    // Add debugging properties
+    const response = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: prompt }],
+      headers: {
+        "Helicone-Property-Debug": "true",
+        "Helicone-Property-Prompt-Version": "v2",
+      },
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Rate Limit Errors" icon="ban">
+    **Problem:** Hitting rate limits from LLM provider
+    
+    **Debug Steps:**
+    1. Check error messages in Helicone dashboard
+    2. View rate limit headers
+    3. Implement retry logic with exponential backoff
+    4. Enable automatic fallbacks to alternative providers
+    
+    ```typescript
+    const response = await client.chat.completions.create({
+      model: "gpt-4o,claude-sonnet-4", // Auto-fallback
+      messages: [{ role: "user", content: prompt }],
+      headers: {
+        "Helicone-Retry-Enabled": "true",
+      },
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="High Latency" icon="clock">
+    **Problem:** Slow response times affecting user experience
+    
+    **Debug Steps:**
+    1. Check request latency in Helicone dashboard
+    2. Analyze time-to-first-token metrics
+    3. Consider using faster models
+    4. Implement streaming for better UX
+    5. Enable caching for repeated requests
+    
+    ```typescript
+    // Monitor latency with custom properties
+    const start = Date.now();
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini", // Faster model
+      messages: [{ role: "user", content: prompt }],
+      stream: true, // Stream for faster perceived latency
+      headers: {
+        "Helicone-Cache-Enabled": "true",
+      },
+    });
+    const latency = Date.now() - start;
+    ```
+  </Accordion>
+  
+  <Accordion title="High Costs" icon="dollar-sign">
+    **Problem:** Unexpected high costs from LLM usage
+    
+    **Debug Steps:**
+    1. View cost breakdown in dashboard
+    2. Identify high-cost requests
+    3. Check token usage per request
+    4. Look for inefficient prompts or repeated requests
+    5. Implement caching and use cheaper models where possible
+    
+    See the [Cost Tracking Guide](/guides/cost-tracking) for optimization strategies.
+  </Accordion>
+</AccordionGroup>
+
+## Request Inspection
+
+### View Request Details
+
+Inspect any request in the Helicone dashboard:
+
+1. Navigate to **Requests**
+2. Click on any request to view:
+   - Complete input prompt
+   - Full model response
+   - Token counts (input/output/total)
+   - Cost breakdown
+   - Latency metrics
+   - Custom properties
+   - Session context
+
+### Search and Filter
+
+Find specific requests:
+
+```typescript
+// Add searchable properties
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: prompt }],
+  headers: {
+    "Helicone-Property-User-Id": userId,
+    "Helicone-Property-Feature": "chat",
+    "Helicone-Property-Environment": "production",
+  },
+});
+```
+
+Then filter in dashboard by:
+- User ID
+- Feature
+- Environment
+- Date range
+- Status code
+- Model
+
+## Error Tracking
+
+### Monitor Error Rates
+
+Track errors across your application:
+
+```bash
+# Query failed requests
+curl -X POST https://api.helicone.ai/v1/request/query \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filter": {
+      "request_created_at": {
+        "gte": "2024-01-01T00:00:00Z"
+      },
+      "status_code": {
+        "gte": 400
+      }
+    }
+  }'
+```
+
+### Common Error Codes
+
+| Status Code | Meaning | Solution |
+|-------------|---------|----------|
+| 400 | Bad Request | Check input format |
+| 401 | Unauthorized | Verify API key |
+| 429 | Rate Limited | Implement retry logic |
+| 500 | Server Error | Contact provider support |
+| 503 | Service Unavailable | Enable fallbacks |
+
+### Implement Error Handling
+
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+async function robustLLMCall(prompt: string) {
+  try {
+    const response = await client.chat.completions.create({
+      model: "gpt-4o,claude-sonnet-4", // Fallback
+      messages: [{ role: "user", content: prompt }],
+      headers: {
+        "Helicone-Retry-Enabled": "true",
+        "Helicone-Property-Environment": process.env.NODE_ENV,
+      },
+    });
+    return response;
+  } catch (error) {
+    // Error is automatically logged in Helicone
+    console.error("LLM call failed:", error);
+    
+    // Implement fallback logic
+    return getFallbackResponse();
+  }
+}
+```
+
+## Performance Analysis
+
+### Latency Metrics
+
+Analyze response times:
+
+1. Go to **Analytics** → **Performance**
+2. View metrics:
+   - Average latency
+   - P50, P95, P99 percentiles
+   - Time-to-first-token (streaming)
+   - Total time
+3. Group by model or custom property
+
+### Token Usage Analysis
+
+Optimize token consumption:
+
+```typescript
+// Track token usage patterns
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: prompt }],
+  headers: {
+    "Helicone-Property-Prompt-Type": "summary", // or "chat", "extract", etc.
+  },
+});
+
+// View token usage in dashboard grouped by prompt type
+```
+
+## Session Debugging
+
+### Debug Multi-Step Workflows
+
+Track agent or chatbot sessions:
+
+```typescript
+const sessionId = `debug-session-${Date.now()}`;
+
+// Step 1
+const step1 = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: "Analyze this" }],
+  headers: {
+    "Helicone-Session-Id": sessionId,
+    "Helicone-Session-Path": "/debug/step1",
+    "Helicone-Property-Debug": "true",
+  },
+});
+
+// Step 2
+const step2 = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [
+    { role: "user", content: "Analyze this" },
+    { role: "assistant", content: step1.choices[0].message.content },
+    { role: "user", content: "Now do this" },
+  ],
+  headers: {
+    "Helicone-Session-Id": sessionId,
+    "Helicone-Session-Path": "/debug/step2",
+  },
+});
+```
+
+View the complete session flow in the dashboard to:
+- See the full conversation history
+- Identify where errors occur
+- Check token usage per step
+- Analyze costs per session
+
+## Testing Strategies
+
+### Development vs Production
+
+Separate environments for testing:
+
+```typescript
+const environment = process.env.NODE_ENV || "development";
+
+const response = await client.chat.completions.create({
+  model: environment === "production" ? "gpt-4o" : "gpt-4o-mini",
+  messages: [{ role: "user", content: prompt }],
+  headers: {
+    "Helicone-Property-Environment": environment,
+  },
+});
+```
+
+### A/B Testing Prompts
+
+Compare prompt variations:
+
+```typescript
+const promptVersion = Math.random() > 0.5 ? "A" : "B";
+
+const prompts = {
+  A: "Summarize the following text concisely:",
+  B: "Provide a brief summary of:",
+};
+
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{
+    role: "user",
+    content: `${prompts[promptVersion]} ${text}`,
+  }],
+  headers: {
+    "Helicone-Property-Prompt-Version": promptVersion,
+  },
+});
+
+// Compare results in dashboard
+```
+
+## Alerting and Monitoring
+
+### Set Up Alerts
+
+<Steps>
+  <Step title="Navigate to Alerts">
+    Go to **Settings** → **Alerts**
+  </Step>
+  
+  <Step title="Create Alert Rules">
+    Configure alerts for:
+    - Error rate threshold (e.g., more than 5% errors)
+    - Latency threshold (e.g., P95 greater than 3 seconds)
+    - Cost threshold (e.g., daily costs exceed $100)
+  </Step>
+  
+  <Step title="Configure Notifications">
+    Choose notification method:
+    - Email
+    - Webhook
+    - Slack
+  </Step>
+</Steps>
+
+### Webhook Integration
+
+```typescript
+// Receive alerts via webhook
+app.post("/webhooks/helicone-alerts", (req, res) => {
+  const alert = req.body;
+  
+  if (alert.type === "error_rate") {
+    // High error rate detected
+    console.error(`Alert: Error rate ${alert.error_rate}% exceeds threshold`);
+    notifyDevTeam(alert);
+  }
+  
+  if (alert.type === "high_latency") {
+    // High latency detected
+    console.warn(`Alert: P95 latency ${alert.p95_latency}ms exceeds threshold`);
+    investigateLatency(alert);
+  }
+  
+  res.status(200).send("OK");
+});
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Add Debug Properties" icon="tag">
+    Always add debugging context:
+    
+    ```typescript
+    headers: {
+      "Helicone-Property-User-Id": userId,
+      "Helicone-Property-Environment": environment,
+      "Helicone-Property-Feature": featureName,
+      "Helicone-Property-Version": appVersion,
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Use Session Tracking" icon="diagram-project">
+    Track multi-step workflows:
+    - Use consistent session IDs
+    - Add descriptive session names
+    - Use hierarchical paths
+  </Accordion>
+  
+  <Accordion title="Monitor in Real-Time" icon="chart-line">
+    Check dashboard regularly:
+    - Set up daily digest emails
+    - Configure critical alerts
+    - Review error logs weekly
+  </Accordion>
+  
+  <Accordion title="Test in Development" icon="flask">
+    Catch issues before production:
+    - Use cheaper models in dev
+    - Test with various inputs
+    - Monitor costs and latency
+    - Validate outputs
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Requests"
+    icon="list"
+    href="/observability/requests"
+  >
+    Learn about request inspection
+  </Card>
+  <Card
+    title="Sessions"
+    icon="diagram-project"
+    href="/observability/sessions"
+  >
+    Track multi-step workflows
+  </Card>
+  <Card
+    title="Custom Properties"
+    icon="tags"
+    href="/observability/custom-properties"
+  >
+    Add debugging metadata
+  </Card>
+  <Card
+    title="Error Handling"
+    icon="shield-halved"
+    href="/guides/error-handling"
+  >
+    Implement robust error handling
+  </Card>
+</CardGroup>

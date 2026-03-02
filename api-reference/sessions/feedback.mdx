@@ -1,0 +1,100 @@
+---
+title: 'Session Feedback'
+api: 'POST https://api.helicone.ai/v1/session/{sessionId}/feedback'
+description: 'Add feedback rating to a session'
+---
+
+## Overview
+
+Submit thumbs up/down feedback for an entire session to track conversation quality.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Your Helicone API key. Format: `Bearer YOUR_API_KEY`
+</ParamField>
+
+## Path Parameters
+
+<ParamField path="sessionId" type="string" required>
+  The unique identifier of the session
+</ParamField>
+
+## Request Body
+
+<ParamField body="rating" type="boolean" required>
+  Feedback rating: `true` for positive, `false` for negative
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="null">
+  Returns null on success
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if request failed
+</ResponseField>
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.helicone.ai/v1/session/sess_abc123/feedback \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "rating": true
+  }'
+```
+
+```python Python
+import requests
+
+url = "https://api.helicone.ai/v1/session/sess_abc123/feedback"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json"
+}
+payload = {
+    "rating": True
+}
+
+response = requests.post(url, json=payload, headers=headers)
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.helicone.ai/v1/session/sess_abc123/feedback',
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      rating: true,
+    }),
+  }
+);
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200 Success
+{
+  "data": null,
+  "error": null
+}
+```
+
+```json 500 Error
+{
+  "data": null,
+  "error": "Failed to update session feedback"
+}
+```
+
+</ResponseExample>

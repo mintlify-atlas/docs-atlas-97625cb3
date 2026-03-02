@@ -1,0 +1,546 @@
+---
+title: "LangChain Integration"
+sidebarTitle: "LangChain"
+description: "Integrate Helicone with LangChain to monitor chains, agents, and tool usage"
+icon: "link"
+---
+
+## Introduction
+
+Helicone integrates seamlessly with LangChain, providing comprehensive observability for your chains, agents, tools, and retrievers. Track every step of your LangChain applications with full request/response logging, cost tracking, and performance monitoring.
+
+<Note>
+  For new projects, consider using the [AI Gateway](/gateway/overview) with LangChain for unified access to 100+ models.
+</Note>
+
+## Quick Start
+
+Integrate Helicone with LangChain by configuring the base URL for your LLM provider.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    <Steps>
+      <Step title="Install dependencies">
+        ```bash
+        npm install @langchain/openai @langchain/core langchain
+        ```
+      </Step>
+
+      <Step title="Set environment variables">
+        ```bash
+        HELICONE_API_KEY=sk-helicone-...
+        OPENAI_API_KEY=sk-...
+        ```
+      </Step>
+
+      <Step title="Configure LangChain with Helicone">
+        ```typescript
+        import { ChatOpenAI } from "@langchain/openai";
+
+        const llm = new ChatOpenAI({
+          modelName: "gpt-4o",
+          openAIApiKey: process.env.OPENAI_API_KEY,
+          configuration: {
+            basePath: "https://oai.helicone.ai/v1",
+            defaultHeaders: {
+              "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+            },
+          },
+        });
+
+        const response = await llm.invoke("What is the meaning of life?");
+        console.log(response.content);
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Python">
+    <Steps>
+      <Step title="Install dependencies">
+        ```bash
+        pip install langchain langchain-openai python-dotenv
+        ```
+      </Step>
+
+      <Step title="Set environment variables">
+        ```bash
+        HELICONE_API_KEY=sk-helicone-...
+        OPENAI_API_KEY=sk-...
+        ```
+      </Step>
+
+      <Step title="Configure LangChain with Helicone">
+        ```python
+        from langchain_openai import ChatOpenAI
+        from dotenv import load_dotenv
+        import os
+
+        load_dotenv()
+
+        llm = ChatOpenAI(
+            model="gpt-4o",
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+            openai_api_base="https://oai.helicone.ai/v1",
+            default_headers={
+                "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+            },
+        )
+
+        response = llm.invoke("What is the meaning of life?")
+        print(response.content)
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Using with Different Providers
+
+### Anthropic with LangChain
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    ```typescript
+    import { ChatAnthropic } from "@langchain/anthropic";
+
+    const llm = new ChatAnthropic({
+      modelName: "claude-3-5-sonnet-20241022",
+      anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+      clientOptions: {
+        baseURL: "https://anthropic.helicone.ai",
+        defaultHeaders: {
+          "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+        },
+      },
+    });
+
+    const response = await llm.invoke("Write a haiku about AI");
+    console.log(response.content);
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    from langchain_anthropic import ChatAnthropic
+    import os
+
+    llm = ChatAnthropic(
+        model="claude-3-5-sonnet-20241022",
+        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+        base_url="https://anthropic.helicone.ai",
+        default_headers={
+            "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+        },
+    )
+
+    response = llm.invoke("Write a haiku about AI")
+    print(response.content)
+    ```
+  </Tab>
+</Tabs>
+
+## Advanced Features
+
+### Tracking Chains
+
+Automatically track entire LangChain chains with all intermediate steps.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    ```typescript
+    import { ChatOpenAI } from "@langchain/openai";
+    import { PromptTemplate } from "@langchain/core/prompts";
+    import { StringOutputParser } from "@langchain/core/output_parsers";
+
+    const llm = new ChatOpenAI({
+      modelName: "gpt-4o",
+      configuration: {
+        basePath: "https://oai.helicone.ai/v1",
+        defaultHeaders: {
+          "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+          "Helicone-Property-Chain": "translation-chain",
+        },
+      },
+    });
+
+    const prompt = PromptTemplate.fromTemplate(
+      "Translate the following text to {language}: {text}"
+    );
+
+    const chain = prompt.pipe(llm).pipe(new StringOutputParser());
+
+    const result = await chain.invoke({
+      language: "French",
+      text: "Hello, how are you?",
+    });
+
+    console.log(result);
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    from langchain_openai import ChatOpenAI
+    from langchain.prompts import PromptTemplate
+    from langchain.schema.output_parser import StrOutputParser
+    import os
+
+    llm = ChatOpenAI(
+        model="gpt-4o",
+        openai_api_base="https://oai.helicone.ai/v1",
+        default_headers={
+            "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+            "Helicone-Property-Chain": "translation-chain",
+        },
+    )
+
+    prompt = PromptTemplate.from_template(
+        "Translate the following text to {language}: {text}"
+    )
+
+    chain = prompt | llm | StrOutputParser()
+
+    result = chain.invoke({
+        "language": "French",
+        "text": "Hello, how are you?",
+    })
+
+    print(result)
+    ```
+  </Tab>
+</Tabs>
+
+### Tracking Agents
+
+Monitor agent actions, tool calls, and reasoning steps.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    ```typescript
+    import { ChatOpenAI } from "@langchain/openai";
+    import { AgentExecutor, createOpenAIFunctionsAgent } from "langchain/agents";
+    import { DynamicTool } from "@langchain/core/tools";
+    import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
+
+    const llm = new ChatOpenAI({
+      modelName: "gpt-4o",
+      configuration: {
+        basePath: "https://oai.helicone.ai/v1",
+        defaultHeaders: {
+          "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+          "Helicone-Property-Type": "agent",
+        },
+      },
+    });
+
+    const tools = [
+      new DynamicTool({
+        name: "get_weather",
+        description: "Get the current weather for a location",
+        func: async (location: string) => {
+          return `The weather in ${location} is sunny, 72°F`;
+        },
+      }),
+    ];
+
+    const prompt = ChatPromptTemplate.fromMessages([
+      ["system", "You are a helpful assistant."],
+      ["human", "{input}"],
+      new MessagesPlaceholder("agent_scratchpad"),
+    ]);
+
+    const agent = await createOpenAIFunctionsAgent({
+      llm,
+      tools,
+      prompt,
+    });
+
+    const agentExecutor = new AgentExecutor({
+      agent,
+      tools,
+    });
+
+    const result = await agentExecutor.invoke({
+      input: "What's the weather like in San Francisco?",
+    });
+
+    console.log(result.output);
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    from langchain_openai import ChatOpenAI
+    from langchain.agents import AgentExecutor, create_openai_functions_agent
+    from langchain.tools import Tool
+    from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+    import os
+
+    llm = ChatOpenAI(
+        model="gpt-4o",
+        openai_api_base="https://oai.helicone.ai/v1",
+        default_headers={
+            "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+            "Helicone-Property-Type": "agent",
+        },
+    )
+
+    def get_weather(location: str) -> str:
+        return f"The weather in {location} is sunny, 72°F"
+
+    tools = [
+        Tool(
+            name="get_weather",
+            description="Get the current weather for a location",
+            func=get_weather,
+        ),
+    ]
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are a helpful assistant."),
+        ("human", "{input}"),
+        MessagesPlaceholder("agent_scratchpad"),
+    ])
+
+    agent = create_openai_functions_agent(llm, tools, prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=tools)
+
+    result = agent_executor.invoke({
+        "input": "What's the weather like in San Francisco?"
+    })
+
+    print(result["output"])
+    ```
+  </Tab>
+</Tabs>
+
+### Session Tracking
+
+Track conversations and chain executions as sessions.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    ```typescript
+    import { ChatOpenAI } from "@langchain/openai";
+
+    const sessionId = "conversation-abc123";
+
+    const llm = new ChatOpenAI({
+      modelName: "gpt-4o",
+      configuration: {
+        basePath: "https://oai.helicone.ai/v1",
+        defaultHeaders: {
+          "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+          "Helicone-Session-Id": sessionId,
+          "Helicone-Session-Name": "LangChain Chat",
+          "Helicone-User-Id": "user-123",
+        },
+      },
+    });
+
+    const response = await llm.invoke("Hello!");
+    console.log(response.content);
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    from langchain_openai import ChatOpenAI
+    import os
+
+    session_id = "conversation-abc123"
+
+    llm = ChatOpenAI(
+        model="gpt-4o",
+        openai_api_base="https://oai.helicone.ai/v1",
+        default_headers={
+            "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+            "Helicone-Session-Id": session_id,
+            "Helicone-Session-Name": "LangChain Chat",
+            "Helicone-User-Id": "user-123",
+        },
+    )
+
+    response = llm.invoke("Hello!")
+    print(response.content)
+    ```
+  </Tab>
+</Tabs>
+
+### Custom Properties
+
+Add metadata to track chain types, environments, and more.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    ```typescript
+    const llm = new ChatOpenAI({
+      modelName: "gpt-4o",
+      configuration: {
+        basePath: "https://oai.helicone.ai/v1",
+        defaultHeaders: {
+          "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+          "Helicone-Property-Environment": "production",
+          "Helicone-Property-Chain-Type": "qa-retrieval",
+          "Helicone-Property-Version": "v2.1.0",
+        },
+      },
+    });
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    llm = ChatOpenAI(
+        model="gpt-4o",
+        openai_api_base="https://oai.helicone.ai/v1",
+        default_headers={
+            "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+            "Helicone-Property-Environment": "production",
+            "Helicone-Property-Chain-Type": "qa-retrieval",
+            "Helicone-Property-Version": "v2.1.0",
+        },
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## RAG Applications
+
+Track retrieval-augmented generation workflows.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    ```typescript
+    import { ChatOpenAI } from "@langchain/openai";
+    import { MemoryVectorStore } from "langchain/vectorstores/memory";
+    import { OpenAIEmbeddings } from "@langchain/openai";
+    import { createRetrievalChain } from "langchain/chains/retrieval";
+    import { createStuffDocumentsChain } from "langchain/chains/combine_documents";
+    import { ChatPromptTemplate } from "@langchain/core/prompts";
+
+    const embeddings = new OpenAIEmbeddings({
+      configuration: {
+        basePath: "https://oai.helicone.ai/v1",
+        defaultHeaders: {
+          "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+          "Helicone-Property-Type": "embeddings",
+        },
+      },
+    });
+
+    const llm = new ChatOpenAI({
+      modelName: "gpt-4o",
+      configuration: {
+        basePath: "https://oai.helicone.ai/v1",
+        defaultHeaders: {
+          "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+          "Helicone-Property-Type": "rag-generation",
+        },
+      },
+    });
+
+    // Create vector store and retrieval chain
+    const vectorStore = await MemoryVectorStore.fromTexts(
+      ["LangChain is a framework for LLM applications"],
+      [{ source: "docs" }],
+      embeddings
+    );
+
+    const retriever = vectorStore.asRetriever();
+
+    const prompt = ChatPromptTemplate.fromTemplate(
+      "Answer based on context: {context}\n\nQuestion: {input}"
+    );
+
+    const combineDocsChain = await createStuffDocumentsChain({
+      llm,
+      prompt,
+    });
+
+    const retrievalChain = await createRetrievalChain({
+      retriever,
+      combineDocsChain,
+    });
+
+    const result = await retrievalChain.invoke({
+      input: "What is LangChain?",
+    });
+
+    console.log(result.answer);
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+    from langchain.vectorstores import FAISS
+    from langchain.chains import RetrievalQA
+    from langchain.text_splitter import CharacterTextSplitter
+    import os
+
+    embeddings = OpenAIEmbeddings(
+        openai_api_base="https://oai.helicone.ai/v1",
+        default_headers={
+            "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+            "Helicone-Property-Type": "embeddings",
+        },
+    )
+
+    llm = ChatOpenAI(
+        model="gpt-4o",
+        openai_api_base="https://oai.helicone.ai/v1",
+        default_headers={
+            "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+            "Helicone-Property-Type": "rag-generation",
+        },
+    )
+
+    # Create vector store
+    texts = ["LangChain is a framework for LLM applications"]
+    vectorstore = FAISS.from_texts(texts, embeddings)
+
+    # Create retrieval chain
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=llm,
+        chain_type="stuff",
+        retriever=vectorstore.as_retriever(),
+    )
+
+    result = qa_chain.invoke({"query": "What is LangChain?"})
+    print(result["result"])
+    ```
+  </Tab>
+</Tabs>
+
+## Monitoring and Analytics
+
+Once integrated, view your LangChain usage in the Helicone dashboard:
+
+- **Chain execution logs** - Track all steps in your chains
+- **Agent traces** - View agent reasoning and tool calls
+- **Cost tracking** - Monitor costs across chains and agents
+- **Performance metrics** - Analyze latency for each chain step
+- **Error tracking** - Debug failed chains and agent executions
+
+<Card title="View Dashboard" icon="chart-line" href="https://us.helicone.ai/dashboard">
+  Monitor your LangChain usage in real-time
+</Card>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="AI Gateway" icon="arrow-progress" href="/gateway/overview">
+    Use the unified API for 100+ models
+  </Card>
+  <Card title="Sessions" icon="link" href="/observability/sessions">
+    Track multi-turn conversations
+  </Card>
+  <Card title="Custom Properties" icon="tags" href="/observability/custom-properties">
+    Add metadata to your requests
+  </Card>
+  <Card title="Traces" icon="diagram-project" href="/observability/traces">
+    Visualize chain and agent execution
+  </Card>
+</CardGroup>

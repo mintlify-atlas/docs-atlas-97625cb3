@@ -1,0 +1,355 @@
+---
+title: "OpenAI Integration"
+sidebarTitle: "OpenAI"
+description: "Integrate Helicone with OpenAI to monitor GPT-4, GPT-3.5, and other OpenAI models"
+icon: "code"
+---
+
+## Introduction
+
+Helicone provides comprehensive observability for OpenAI's API, supporting all models including GPT-4, GPT-4o, GPT-3.5, DALL-E, Whisper, and embeddings.
+
+<Note>
+  For new projects, we recommend using the [AI Gateway](/gateway/overview) for unified access to 100+ models including OpenAI.
+</Note>
+
+## Quick Start
+
+Integrate Helicone with OpenAI in just a few lines of code by changing the base URL and adding a header.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    <Steps>
+      <Step title="Install OpenAI SDK">
+        ```bash
+        npm install openai
+        ```
+      </Step>
+
+      <Step title="Set environment variables">
+        ```bash
+        HELICONE_API_KEY=sk-helicone-...
+        OPENAI_API_KEY=sk-...
+        ```
+      </Step>
+
+      <Step title="Update your code">
+        ```typescript
+        import OpenAI from "openai";
+
+        const openai = new OpenAI({
+          apiKey: process.env.OPENAI_API_KEY,
+          baseURL: "https://oai.helicone.ai/v1",
+          defaultHeaders: {
+            "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+          },
+        });
+
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "user", content: "What is the meaning of life?" },
+          ],
+        });
+
+        console.log(response.choices[0].message.content);
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Python">
+    <Steps>
+      <Step title="Install OpenAI SDK">
+        ```bash
+        pip install openai python-dotenv
+        ```
+      </Step>
+
+      <Step title="Set environment variables">
+        ```bash
+        HELICONE_API_KEY=sk-helicone-...
+        OPENAI_API_KEY=sk-...
+        ```
+      </Step>
+
+      <Step title="Update your code">
+        ```python
+        from openai import OpenAI
+        from dotenv import load_dotenv
+        import os
+
+        load_dotenv()
+
+        client = OpenAI(
+            api_key=os.getenv("OPENAI_API_KEY"),
+            base_url="https://oai.helicone.ai/v1",
+            default_headers={
+                "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+            },
+        )
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": "What is the meaning of life?"},
+            ],
+        )
+
+        print(response.choices[0].message.content)
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="cURL">
+    <Steps>
+      <Step title="Set environment variables">
+        ```bash
+        export HELICONE_API_KEY=sk-helicone-...
+        export OPENAI_API_KEY=sk-...
+        ```
+      </Step>
+
+      <Step title="Make a request">
+        ```bash
+        curl https://oai.helicone.ai/v1/chat/completions \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer $OPENAI_API_KEY" \
+          -H "Helicone-Auth: Bearer $HELICONE_API_KEY" \
+          -d '{
+            "model": "gpt-4o-mini",
+            "messages": [
+              {"role": "user", "content": "What is the meaning of life?"}
+            ]
+          }'
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Advanced Features
+
+### Custom Properties
+
+Add metadata to your requests for better filtering and analytics.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    ```typescript
+    const response = await openai.chat.completions.create(
+      {
+        model: "gpt-4o",
+        messages: [
+          { role: "user", content: "Write a haiku about AI" },
+        ],
+      },
+      {
+        headers: {
+          "Helicone-Property-Environment": "production",
+          "Helicone-Property-Feature": "haiku-generator",
+          "Helicone-User-Id": "user-123",
+        },
+      }
+    );
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "user", "content": "Write a haiku about AI"},
+        ],
+        extra_headers={
+            "Helicone-Property-Environment": "production",
+            "Helicone-Property-Feature": "haiku-generator",
+            "Helicone-User-Id": "user-123",
+        },
+    )
+    ```
+  </Tab>
+</Tabs>
+
+### Session Tracking
+
+Group related requests into sessions to track conversations.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    ```typescript
+    const sessionId = "conversation-abc123";
+
+    const response = await openai.chat.completions.create(
+      {
+        model: "gpt-4o",
+        messages: [
+          { role: "user", content: "Hello!" },
+        ],
+      },
+      {
+        headers: {
+          "Helicone-Session-Id": sessionId,
+          "Helicone-Session-Name": "Customer Support Chat",
+          "Helicone-Session-Path": "/chat/support",
+        },
+      }
+    );
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    session_id = "conversation-abc123"
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "user", "content": "Hello!"},
+        ],
+        extra_headers={
+            "Helicone-Session-Id": session_id,
+            "Helicone-Session-Name": "Customer Support Chat",
+            "Helicone-Session-Path": "/chat/support",
+        },
+    )
+    ```
+  </Tab>
+</Tabs>
+
+### Caching
+
+Enable semantic caching to reduce costs and latency for similar requests.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    ```typescript
+    const response = await openai.chat.completions.create(
+      {
+        model: "gpt-4o",
+        messages: [
+          { role: "user", content: "What is the capital of France?" },
+        ],
+      },
+      {
+        headers: {
+          "Helicone-Cache-Enabled": "true",
+        },
+      }
+    );
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "user", "content": "What is the capital of France?"},
+        ],
+        extra_headers={
+            "Helicone-Cache-Enabled": "true",
+        },
+    )
+    ```
+  </Tab>
+</Tabs>
+
+### Rate Limiting
+
+Control API usage per user or endpoint.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    ```typescript
+    const response = await openai.chat.completions.create(
+      {
+        model: "gpt-4o",
+        messages: [
+          { role: "user", content: "Hello!" },
+        ],
+      },
+      {
+        headers: {
+          "Helicone-RateLimit-Policy": "100;w=60;u=user-123",
+        },
+      }
+    );
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "user", "content": "Hello!"},
+        ],
+        extra_headers={
+            "Helicone-RateLimit-Policy": "100;w=60;u=user-123",
+        },
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Supported Models
+
+Helicone supports all OpenAI models:
+
+- **Chat**: GPT-4o, GPT-4, GPT-4 Turbo, GPT-3.5 Turbo
+- **Images**: DALL-E 3, DALL-E 2
+- **Audio**: Whisper, TTS
+- **Embeddings**: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002
+- **Moderation**: text-moderation-latest
+
+## Migration from AI Gateway
+
+Already using the AI Gateway? Here's how to use OpenAI specifically:
+
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+## Monitoring and Analytics
+
+Once integrated, view your OpenAI usage in the Helicone dashboard:
+
+- **Request logs** - Full request/response data for debugging
+- **Cost tracking** - Real-time cost monitoring across models
+- **Latency metrics** - Response time analysis
+- **Error tracking** - Failed requests and error patterns
+- **User analytics** - Per-user usage and costs
+
+<Card title="View Dashboard" icon="chart-line" href="https://us.helicone.ai/dashboard">
+  Monitor your OpenAI usage in real-time
+</Card>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="AI Gateway" icon="arrow-progress" href="/gateway/overview">
+    Use the unified API for 100+ models
+  </Card>
+  <Card title="Custom Properties" icon="tags" href="/observability/custom-properties">
+    Learn about custom properties and metadata
+  </Card>
+  <Card title="Sessions" icon="link" href="/observability/sessions">
+    Track multi-turn conversations
+  </Card>
+  <Card title="Caching" icon="bolt" href="/gateway/caching">
+    Reduce costs with semantic caching
+  </Card>
+</CardGroup>

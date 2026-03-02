@@ -1,0 +1,336 @@
+---
+title: "Introduction to Helicone"
+description: "Helicone is an open-source LLM observability platform and AI Gateway that helps you monitor, evaluate, and optimize AI applications with powerful tracing, analytics, and multi-provider support."
+---
+
+## What is Helicone?
+
+Helicone is an **open-source LLM observability platform** and **AI Gateway** designed for AI engineers building production applications with Large Language Models. It provides comprehensive monitoring, debugging, and optimization tools for AI applications while offering access to 100+ AI models through a unified API.
+
+<CardGroup cols={2}>
+  <Card title="AI Gateway" icon="gateway" iconType="duotone">
+    Access 100+ AI models with intelligent routing, automatic fallbacks, and unified observability
+  </Card>
+  <Card title="Observability" icon="chart-line" iconType="duotone">
+    Monitor requests, traces, sessions, costs, and latency in real-time
+  </Card>
+  <Card title="Prompt Management" icon="code" iconType="duotone">
+    Version and deploy prompts without code changes through the AI Gateway
+  </Card>
+  <Card title="Enterprise Ready" icon="shield-check" iconType="duotone">
+    SOC 2 and GDPR compliant with self-hosting options
+  </Card>
+</CardGroup>
+
+## Who is Helicone for?
+
+Helicone is built for teams and developers working with LLMs:
+
+<AccordionGroup>
+  <Accordion title="AI Application Developers">
+    Build and ship AI features faster with real-time insights into model performance, costs, and user interactions. Debug issues quickly with comprehensive request tracing and error monitoring.
+  </Accordion>
+  
+  <Accordion title="Platform Engineers">
+    Deploy and scale AI infrastructure with confidence using self-hosted deployments, unified multi-provider access, and enterprise-grade security compliance.
+  </Accordion>
+  
+  <Accordion title="Product Teams">
+    Understand how users interact with AI features, track quality metrics, run A/B tests on prompts, and optimize costs across different model providers.
+  </Accordion>
+  
+  <Accordion title="ML/AI Engineers">
+    Fine-tune models with production data, evaluate model quality with custom scoring, and experiment with different providers and configurations.
+  </Accordion>
+</AccordionGroup>
+
+## Key Features
+
+### AI Gateway
+
+**Unified API for 100+ AI Models** - Access models from OpenAI, Anthropic, Google, AWS Bedrock, Azure, and more through a single OpenAI-compatible API.
+
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+// Use any model from any provider
+const response = await client.chat.completions.create({
+  model: "gpt-4o-mini", // or claude-sonnet-4, gemini-2.0-flash, etc.
+  messages: [{ role: "user", content: "Hello!" }]
+});
+```
+
+**Intelligent Routing & Fallbacks** - Automatically route requests to the best provider and fall back to alternatives if needed.
+
+```typescript
+// Comma-separated models for automatic fallback
+model: "gpt-4o,claude-sonnet-4,gemini-2.0-flash"
+```
+
+### LLM Observability
+
+**Request Logging** - Every LLM request is automatically captured with full request/response details, latency, tokens, and cost.
+
+**Session Tracing** - Track multi-step agent interactions and conversation flows with hierarchical tracing.
+
+```typescript
+const openai = new OpenAI({
+  baseURL: "https://oai.helicone.ai/v1",
+  apiKey: process.env.OPENAI_API_KEY,
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+await openai.chat.completions.create(
+  {
+    model: "gpt-4",
+    messages: [{ role: "user", content: "Generate a course outline" }],
+  },
+  {
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Session-Name": "Course Generation",
+      "Helicone-Session-Path": "/outline",
+    },
+  }
+);
+```
+
+**Cost & Latency Tracking** - Automatically calculate costs across 300+ models with the largest open-source pricing database. Monitor response times and identify performance bottlenecks.
+
+**Custom Properties** - Tag requests with metadata for filtering and analysis.
+
+### Prompt Management
+
+**Version Control** - Track prompt versions in production and compare performance across iterations.
+
+**Gateway Deployment** - Deploy prompts through the AI Gateway without code changes. Update prompts in production instantly.
+
+**Playground** - Test and iterate on prompts, sessions, and traces directly in the UI.
+
+### Evaluation & Experimentation
+
+**Custom Scoring** - Define custom evaluation criteria and score LLM responses.
+
+**Datasets** - Build datasets from production data for testing and fine-tuning.
+
+**A/B Testing** - Run experiments comparing different prompts, models, or configurations.
+
+**Fine-tuning Integration** - Partner integrations with OpenPipe and Autonomi for model fine-tuning.
+
+## Integration Methods
+
+Helicone offers multiple integration approaches to fit your architecture:
+
+### 1. AI Gateway (Recommended)
+
+Route all requests through Helicone's AI Gateway for automatic logging and multi-provider access.
+
+```typescript
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+});
+```
+
+**Benefits:**
+- Access to 100+ models with one API key
+- Automatic fallbacks and intelligent routing
+- No code changes needed to switch providers
+- Built-in caching and rate limiting
+
+### 2. Proxy Logging
+
+Change the base URL to log requests while using your own API keys.
+
+```typescript
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+```
+
+**Benefits:**
+- Keep your existing API keys
+- Minimal code changes
+- Automatic request logging
+
+### 3. Async Logging
+
+Log requests asynchronously without using a proxy (OpenLLMetry).
+
+```typescript
+import { HeliconeAsyncLogger } from "@helicone/helicone";
+import { OpenAI } from "openai";
+
+const logger = new HeliconeAsyncLogger({
+  apiKey: process.env.HELICONE_API_KEY,
+  providers: { openAI: OpenAI },
+});
+logger.init();
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Requests are automatically logged
+const response = await openai.chat.completions.create({
+  model: "gpt-4",
+  messages: [{ role: "user", content: "Hello" }],
+});
+```
+
+**Benefits:**
+- No proxy latency
+- Works with any LLM provider
+- No baseURL changes needed
+
+### 4. Manual Logging
+
+Full control over what and when to log.
+
+```typescript
+import { HeliconeManualLogger } from "@helicone/helpers";
+
+const heliconeLogger = new HeliconeManualLogger({
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+const response = await heliconeLogger.logRequest(
+  requestBody,
+  async (resultRecorder) => {
+    const res = await fetch("https://api.x.ai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.XAI_API_KEY}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+    const resBody = await res.json();
+    resultRecorder.appendResults(resBody);
+    return resBody;
+  },
+  {
+    "Helicone-Session-Id": "123",
+    "Helicone-Session-Name": "test",
+  }
+);
+```
+
+**Benefits:**
+- Maximum flexibility
+- Works with any API
+- Custom logging logic
+
+## Architecture Overview
+
+Helicone is built on a modern, scalable architecture comprising five core services:
+
+<Steps>
+  <Step title="Web Platform">
+    **Next.js frontend** providing the dashboard, analytics, and management interface for visualizing requests, sessions, prompts, and evaluations.
+    
+    Location: `web/` directory
+  </Step>
+  
+  <Step title="Worker (Proxy)">
+    **Cloudflare Workers** handling proxy logging for all incoming LLM requests. Provides low-latency request forwarding and logging.
+    
+    Location: `worker/` directory
+  </Step>
+  
+  <Step title="Jawn (API Server)">
+    **Express + TypeScript API server** serving REST endpoints for data queries, user management, and integrations. Built with TSOA for type-safe routing.
+    
+    Location: `valhalla/jawn/` directory
+    
+    Architecture:
+    - `controllers/`: Route handlers for REST endpoints
+    - `managers/`: Business logic layer
+    - `lib/stores/`: Database operations
+    - `lib/clients/`: External service integrations
+    - `lib/wrappers/`: Database client wrappers
+  </Step>
+  
+  <Step title="Databases">
+    **Supabase** (PostgreSQL) for application data and authentication
+    
+    **ClickHouse** for high-performance analytics and time-series data
+    
+    **MinIO** for object storage of logs and large payloads
+  </Step>
+  
+  <Step title="SDKs & Packages">
+    - `sdk/typescript/async/`: OpenLLMetry async logging
+    - `sdk/typescript/helpers/`: Manual logging utilities
+    - `packages/cost/`: Model registry and pricing database (300+ models)
+    - `packages/llm-mapper/`: Provider-specific request/response transformations
+  </Step>
+</Steps>
+
+## Data Ownership & Privacy
+
+Helicone is designed with data ownership and privacy as core principles:
+
+<Note>
+**SOC 2 Type II Certified** - Helicone meets strict security and compliance standards for enterprise use.
+</Note>
+
+- **Your Data, Your Control** - All request data belongs to you and can be exported at any time via the API
+- **GDPR Compliant** - Full compliance with European data protection regulations
+- **Self-Hosting Available** - Deploy Helicone in your own infrastructure for complete data control
+- **No Vendor Lock-in** - Export your data anytime through the REST API or MCP server
+
+## Pricing & Free Tier
+
+<Info>
+Helicone offers a **generous free tier** with 10,000 requests per month - no credit card required!
+</Info>
+
+The free tier includes:
+- Full observability features
+- AI Gateway access
+- Prompt management
+- Basic evaluations
+- Community support
+
+For production workloads and enterprise features, see [pricing details](https://www.helicone.ai/pricing).
+
+## Open Source
+
+Helicone is fully open source under the Apache 2.0 license. The entire codebase is available on [GitHub](https://github.com/Helicone/helicone).
+
+**Contributions welcome!** We actively accept contributions for:
+- New provider integrations
+- Model cost additions
+- Documentation improvements
+- Feature requests and bug fixes
+
+Join our [Discord community](https://discord.gg/zsSTcH2qhG) to connect with other users and contributors.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Get Helicone running in 2 minutes with our step-by-step guide
+  </Card>
+  <Card title="Platform Overview" icon="diagram-project" href="/platform-overview">
+    Deep dive into Helicone's architecture and components
+  </Card>
+  <Card title="AI Gateway" icon="gateway" href="/gateway/quickstart">
+    Learn how to use the AI Gateway for multi-provider access
+  </Card>
+  <Card title="Self-Hosting" icon="server" href="/self-hosting/overview">
+    Deploy Helicone in your own infrastructure
+  </Card>
+</CardGroup>

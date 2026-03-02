@@ -1,0 +1,115 @@
+---
+title: 'List Models'
+api: 'GET https://oai.helicone.ai/v1/models'
+description: 'List available models through the Helicone AI Gateway'
+---
+
+## Overview
+
+Retrieve a list of available models from your configured provider through the Helicone gateway.
+
+## Authentication
+
+<ParamField header="Helicone-Auth" type="string" required>
+  Your Helicone API key. Format: `Bearer YOUR_API_KEY`
+</ParamField>
+
+<ParamField header="Authorization" type="string" required>
+  Your provider API key (e.g., OpenAI). Format: `Bearer YOUR_PROVIDER_KEY`
+</ParamField>
+
+## Response
+
+<ResponseField name="object" type="string">
+  Object type, always `list`
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of available models
+  
+  <Expandable title="model object">
+    <ResponseField name="id" type="string">
+      Model identifier (e.g., `gpt-4`, `gpt-3.5-turbo`)
+    </ResponseField>
+    <ResponseField name="object" type="string">
+      Object type, always `model`
+    </ResponseField>
+    <ResponseField name="created" type="number">
+      Unix timestamp of model creation
+    </ResponseField>
+    <ResponseField name="owned_by" type="string">
+      Organization that owns the model
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<RequestExample>
+
+```bash cURL
+curl --request GET \
+  --url https://oai.helicone.ai/v1/models \
+  --header 'Authorization: Bearer YOUR_OPENAI_KEY' \
+  --header 'Helicone-Auth: Bearer YOUR_HELICONE_KEY'
+```
+
+```python Python
+import openai
+
+openai.api_base = "https://oai.helicone.ai/v1"
+openai.api_key = "YOUR_OPENAI_KEY"
+
+models = openai.Model.list(
+    headers={
+        "Helicone-Auth": "Bearer YOUR_HELICONE_KEY"
+    }
+)
+```
+
+```javascript JavaScript
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: 'YOUR_OPENAI_KEY',
+  baseURL: 'https://oai.helicone.ai/v1',
+  defaultHeaders: {
+    'Helicone-Auth': 'Bearer YOUR_HELICONE_KEY',
+  },
+});
+
+const models = await openai.models.list();
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200 Success
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "gpt-4",
+      "object": "model",
+      "created": 1687882411,
+      "owned_by": "openai"
+    },
+    {
+      "id": "gpt-3.5-turbo",
+      "object": "model",
+      "created": 1677610602,
+      "owned_by": "openai"
+    }
+  ]
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": {
+    "message": "Invalid API key",
+    "type": "authentication_error"
+  }
+}
+```
+
+</ResponseExample>

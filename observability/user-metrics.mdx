@@ -1,0 +1,880 @@
+---
+title: "User Metrics"
+sidebarTitle: "User Metrics"
+description: "Track per-user behavior, costs, and usage patterns to understand your user base"
+"twitter:title": "User Metrics - Helicone OSS LLM Observability"
+---
+
+import QuestionsSection from "/snippets/questions-section.mdx";
+
+## Overview
+
+User metrics help you understand how individual users interact with your AI features. Track per-user costs, request counts, token usage, and behavior patterns to optimize your application, identify power users, and ensure fair usage across your user base.
+
+## Why Track User Metrics
+
+<CardGroup cols={2}>
+<Card title="Monitor Costs per User" icon="dollar-sign">
+Identify high-cost users and understand spending patterns across your user base
+</Card>
+
+<Card title="Understand Usage" icon="chart-bar">
+See how different users engage with your AI features and which features are most popular
+</Card>
+
+<Card title="Detect Anomalies" icon="exclamation-triangle">
+Quickly spot unusual usage patterns that might indicate abuse or bugs
+</Card>
+
+<Card title="Optimize Pricing" icon="tags">
+Make data-driven decisions about pricing tiers based on actual usage
+</Card>
+</CardGroup>
+
+## Setting Up User Tracking
+
+### Using the User-Id Header
+
+The recommended way to track users is with the `Helicone-User-Id` header:
+
+<CodeGroup>
+```typescript Node.js
+import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+const response = await client.chat.completions.create(
+  {
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Hello!" }],
+  },
+  {
+    headers: {
+      "Helicone-User-Id": userId, // Dedicated user tracking field
+      "Helicone-Property-User-Email": userEmail, // Optional: additional context
+      "Helicone-Property-User-Tier": "premium", // Optional: segment by tier
+    },
+  }
+);
+```
+
+```python Python  
+from openai import OpenAI
+import os
+
+client = OpenAI(
+    api_key=os.environ.get("OPENAI_API_KEY"),
+    base_url="https://oai.helicone.ai/v1",
+    default_headers={
+        "Helicone-Auth": f"Bearer {os.environ.get('HELICONE_API_KEY')}",
+    },
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Hello!"}],
+    extra_headers={
+        "Helicone-User-Id": user_id,
+        "Helicone-Property-User-Email": user_email,
+        "Helicone-Property-User-Tier": "premium",
+    },
+)
+```
+</CodeGroup>
+
+<Info>
+**Pro Tip**: Also add `Helicone-Property-User-Id` alongside `Helicone-User-Id` to enable filtering by user in the dashboard.
+</Info>
+
+### User ID Best Practices
+
+<AccordionGroup>
+<Accordion title="Use Consistent IDs">
+Always use the same identifier for a user across all their requests:
+
+```typescript
+// Good - consistent identifier
+const userId = user.id; // e.g., "user_abc123"
+
+// Avoid - changing identifiers
+const userId = user.email; // Changes if email changes
+const userId = sessionId;  // Different per session
+```
+</Accordion>
+
+<Accordion title="Keep IDs Anonymous">
+Don't use PII (personally identifiable information) as user IDs:
+
+```typescript
+// Good - anonymous identifier
+"Helicone-User-Id": "user_abc123"
+
+// Avoid - PII in user ID
+"Helicone-User-Id": "john.doe@example.com"
+"Helicone-User-Id": "John Doe"
+```
+
+If you need to track emails or names, use custom properties instead.
+</Accordion>
+
+<Accordion title="Handle Unauthenticated Users">
+For anonymous users, use a consistent identifier:
+
+```typescript
+// Option 1: Use a session ID
+"Helicone-User-Id": sessionId
+
+// Option 2: Use a dedicated anonymous ID
+"Helicone-User-Id": "anonymous"
+"Helicone-Property-Session-Id": sessionId
+
+// Option 3: Generate a unique anonymous ID
+"Helicone-User-Id": `anon_${generateAnonymousId()}`
+```
+</Accordion>
+</AccordionGroup>
+
+## Viewing User Metrics
+
+### In the Dashboard
+
+1. Navigate to the **Users** page in the Helicone dashboard
+2. See a table of all users with key metrics:
+   - Total requests
+   - Total cost
+   - Total tokens
+   - Last active
+3. Click any user to see detailed metrics and request history
+
+### User Detail View
+
+The user detail page shows:
+
+- **Overview**: Total requests, costs, tokens over time
+- **Request Distribution**: How many requests per day/week/month
+- **Cost Distribution**: Spending patterns over time  
+- **Token Distribution**: Input/output token usage
+- **Latency Distribution**: Performance metrics
+- **Recent Requests**: Latest requests from this user
+
+## Querying User Metrics via API
+
+### Get All Users
+
+```typescript
+// Coming soon - user list endpoint
+```
+
+### Get User Requests
+
+Retrieve all requests for a specific user:
+
+<CodeGroup>
+```typescript Node.js
+const response = await fetch("https://api.helicone.ai/v1/request/query", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    filter: {
+      request_response_rmt: {
+        user_id: {
+          equals: userId,
+        },
+      },
+    },
+    offset: 0,
+    limit: 100,
+    sort: {
+      created_at: "desc",
+    },
+  }),
+});
+
+const { data } = await response.json();
+console.log(`User ${userId} has made ${data.length} requests`);
+```
+
+```python Python
+import requests
+import os
+
+response = requests.post(
+    "https://api.helicone.ai/v1/request/query",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('HELICONE_API_KEY')}",
+        "Content-Type": "application/json",
+    },
+    json={
+        "filter": {
+            "request_response_rmt": {
+                "user_id": {
+                    "equals": user_id,
+                },
+            },
+        },
+        "offset": 0,
+        "limit": 100,
+        "sort": {
+            "created_at": "desc",
+        },
+    },
+)
+
+data = response.json()["data"]
+print(f"User {user_id} has made {len(data)} requests")
+```
+</CodeGroup>
+
+### Calculate User Costs
+
+Sum up costs for a user over a time period:
+
+```typescript
+const response = await fetch("https://api.helicone.ai/v1/metrics/totalCost", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    filter: {
+      request_response_rmt: {
+        user_id: {
+          equals: userId,
+        },
+      },
+    },
+    timeFilter: {
+      start: "2024-01-01T00:00:00Z",
+      end: "2024-01-31T23:59:59Z",
+    },
+  }),
+});
+
+const { data: totalCost } = await response.json();
+console.log(`User ${userId} cost: $${totalCost}`);
+```
+
+### Get User Request Count
+
+```typescript
+const response = await fetch("https://api.helicone.ai/v1/request/count/query", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    filter: {
+      request_response_rmt: {
+        user_id: {
+          equals: userId,
+        },
+      },
+    },
+  }),
+});
+
+const { data: requestCount } = await response.json();
+console.log(`User ${userId} has made ${requestCount} requests`);
+```
+
+## User Segmentation
+
+### Segment by User Properties
+
+Combine user IDs with custom properties for powerful segmentation:
+
+```typescript
+headers: {
+  "Helicone-User-Id": userId,
+  "Helicone-Property-User-Tier": "premium",      // Customer tier
+  "Helicone-Property-User-Plan": "enterprise",   // Subscription plan
+  "Helicone-Property-User-Cohort": "2024-q1",   // Signup cohort
+  "Helicone-Property-User-Region": "us-east",   // Geographic region
+}
+```
+
+Then filter by these properties:
+
+```typescript
+// Get all premium users' requests
+filter: {
+  request_response_rmt: {
+    properties: {
+      "User-Tier": { equals: "premium" }
+    }
+  }
+}
+
+// Get enterprise plan costs
+filter: {
+  request_response_rmt: {
+    properties: {
+      "User-Plan": { equals: "enterprise" }
+    }
+  }
+}
+```
+
+### Identify Top Users by Cost
+
+Find your highest-spending users:
+
+```typescript
+const response = await fetch("https://api.helicone.ai/v1/request/query", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    filter: {
+      request_response_rmt: {
+        request_created_at: {
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        },
+      },
+    },
+    limit: 1000, // Get many requests
+    sort: {
+      cost: "desc", // Sort by cost
+    },
+  }),
+});
+
+const { data } = await response.json();
+
+// Group by user and sum costs
+const userCosts = data.reduce((acc, request) => {
+  const userId = request.user_id;
+  if (!acc[userId]) {
+    acc[userId] = 0;
+  }
+  acc[userId] += request.cost;
+  return acc;
+}, {});
+
+// Sort users by cost
+const topUsers = Object.entries(userCosts)
+  .sort(([, a], [, b]) => b - a)
+  .slice(0, 10);
+
+console.log("Top 10 users by cost:", topUsers);
+```
+
+### Identify Top Users by Usage
+
+Find your most active users:
+
+```typescript
+// Similar to above, but group by request count instead of cost
+const userRequestCounts = data.reduce((acc, request) => {
+  const userId = request.user_id;
+  acc[userId] = (acc[userId] || 0) + 1;
+  return acc;
+}, {});
+
+const topUsers = Object.entries(userRequestCounts)
+  .sort(([, a], [, b]) => b - a)
+  .slice(0, 10);
+
+console.log("Top 10 most active users:", topUsers);
+```
+
+## Common Use Cases
+
+<Tabs>
+<Tab title="Cost Allocation">
+**Scenario**: Bill customers based on their actual AI usage.
+
+```typescript
+import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+// Track all requests with user ID
+async function makeRequest(userId: string, prompt: string) {
+  return await client.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+    },
+    {
+      headers: {
+        "Helicone-User-Id": userId,
+        "Helicone-Property-Organization-Id": getOrgId(userId),
+      },
+    }
+  );
+}
+
+// At end of month, calculate costs per user
+async function generateMonthlyInvoices() {
+  const users = await getAllUsers();
+  
+  for (const user of users) {
+    const response = await fetch("https://api.helicone.ai/v1/metrics/totalCost", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        filter: {
+          request_response_rmt: {
+            user_id: { equals: user.id },
+          },
+        },
+        timeFilter: {
+          start: getMonthStart(),
+          end: getMonthEnd(),
+        },
+      }),
+    });
+    
+    const { data: cost } = await response.json();
+    
+    // Bill the user
+    await createInvoice(user.id, cost);
+  }
+}
+```
+</Tab>
+
+<Tab title="Usage Limits">
+**Scenario**: Enforce usage limits per user or plan.
+
+```typescript
+import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+const LIMITS = {
+  free: { requestsPerDay: 100, costPerMonth: 10 },
+  pro: { requestsPerDay: 1000, costPerMonth: 100 },
+  enterprise: { requestsPerDay: Infinity, costPerMonth: Infinity },
+};
+
+async function checkUserLimit(userId: string, userPlan: keyof typeof LIMITS) {
+  // Check daily requests
+  const requestCount = await fetch(
+    "https://api.helicone.ai/v1/request/count/query",
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        filter: {
+          left: {
+            request_response_rmt: {
+              user_id: { equals: userId },
+            },
+          },
+          operator: "and",
+          right: {
+            request_response_rmt: {
+              request_created_at: {
+                gte: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+              },
+            },
+          },
+        },
+      }),
+    }
+  ).then((r) => r.json());
+
+  if (requestCount.data >= LIMITS[userPlan].requestsPerDay) {
+    throw new Error("Daily request limit exceeded");
+  }
+
+  // Check monthly cost
+  const monthlyCost = await fetch("https://api.helicone.ai/v1/metrics/totalCost", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      filter: {
+        request_response_rmt: {
+          user_id: { equals: userId },
+        },
+      },
+      timeFilter: {
+        start: getMonthStart(),
+        end: new Date().toISOString(),
+      },
+    }),
+  }).then((r) => r.json());
+
+  if (monthlyCost.data >= LIMITS[userPlan].costPerMonth) {
+    throw new Error("Monthly cost limit exceeded");
+  }
+}
+
+async function makeRequest(userId: string, userPlan: keyof typeof LIMITS, prompt: string) {
+  // Check limits before making request
+  await checkUserLimit(userId, userPlan);
+  
+  return await client.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+    },
+    {
+      headers: {
+        "Helicone-User-Id": userId,
+        "Helicone-Property-User-Plan": userPlan,
+      },
+    }
+  );
+}
+```
+</Tab>
+
+<Tab title="User Analytics Dashboard">
+**Scenario**: Build an internal dashboard showing user activity.
+
+```typescript
+async function getUserDashboardData(userId: string, days: number = 30) {
+  const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const endDate = new Date();
+
+  // Fetch all user requests in parallel
+  const [requests, totalCost, requestCount] = await Promise.all([
+    // Get requests
+    fetch("https://api.helicone.ai/v1/request/query", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        filter: {
+          left: {
+            request_response_rmt: {
+              user_id: { equals: userId },
+            },
+          },
+          operator: "and",
+          right: {
+            request_response_rmt: {
+              request_created_at: {
+                gte: startDate.toISOString(),
+              },
+            },
+          },
+        },
+        limit: 1000,
+        sort: { created_at: "desc" },
+      }),
+    }).then((r) => r.json()),
+
+    // Get total cost
+    fetch("https://api.helicone.ai/v1/metrics/totalCost", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        filter: {
+          request_response_rmt: {
+            user_id: { equals: userId },
+          },
+        },
+        timeFilter: {
+          start: startDate.toISOString(),
+          end: endDate.toISOString(),
+        },
+      }),
+    }).then((r) => r.json()),
+
+    // Get request count
+    fetch("https://api.helicone.ai/v1/request/count/query", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        filter: {
+          left: {
+            request_response_rmt: {
+              user_id: { equals: userId },
+            },
+          },
+          operator: "and",
+          right: {
+            request_response_rmt: {
+              request_created_at: {
+                gte: startDate.toISOString(),
+              },
+            },
+          },
+        },
+      }),
+    }).then((r) => r.json()),
+  ]);
+
+  // Calculate metrics
+  const totalTokens = requests.data.reduce(
+    (sum, r) => sum + (r.prompt_tokens || 0) + (r.completion_tokens || 0),
+    0
+  );
+
+  const avgLatency =
+    requests.data.reduce((sum, r) => sum + (r.latency || 0), 0) /
+    requests.data.length;
+
+  const modelUsage = requests.data.reduce((acc, r) => {
+    acc[r.model] = (acc[r.model] || 0) + 1;
+    return acc;
+  }, {});
+
+  return {
+    userId,
+    period: { start: startDate, end: endDate, days },
+    totalRequests: requestCount.data,
+    totalCost: totalCost.data,
+    totalTokens,
+    avgLatency,
+    modelUsage,
+    recentRequests: requests.data.slice(0, 10),
+  };
+}
+```
+</Tab>
+
+<Tab title="Anomaly Detection">
+**Scenario**: Detect unusual user behavior patterns.
+
+```typescript
+async function detectAnomalies(userId: string) {
+  // Get user's last 30 days of activity
+  const response = await fetch("https://api.helicone.ai/v1/request/query", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      filter: {
+        left: {
+          request_response_rmt: {
+            user_id: { equals: userId },
+          },
+        },
+        operator: "and",
+        right: {
+          request_response_rmt: {
+            request_created_at: {
+              gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+            },
+          },
+        },
+      },
+      limit: 10000,
+    }),
+  });
+
+  const { data: requests } = await response.json();
+
+  // Calculate baseline metrics
+  const avgDailyRequests = requests.length / 30;
+  const avgDailyCost =
+    requests.reduce((sum, r) => sum + (r.cost || 0), 0) / 30;
+
+  // Check today's activity
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const todayRequests = requests.filter(
+    (r) => new Date(r.created_at) >= todayStart
+  );
+
+  const todayCost = todayRequests.reduce((sum, r) => sum + (r.cost || 0), 0);
+
+  const anomalies = [];
+
+  // Detect unusual request volume
+  if (todayRequests.length > avgDailyRequests * 3) {
+    anomalies.push({
+      type: "high_volume",
+      message: `User ${userId} has ${todayRequests.length} requests today vs ${avgDailyRequests.toFixed(0)} average`,
+      severity: "warning",
+    });
+  }
+
+  // Detect unusual costs
+  if (todayCost > avgDailyCost * 5) {
+    anomalies.push({
+      type: "high_cost",
+      message: `User ${userId} cost $${todayCost.toFixed(2)} today vs $${avgDailyCost.toFixed(2)} average`,
+      severity: "critical",
+    });
+  }
+
+  // Detect rapid-fire requests (possible bot)
+  const recentRequests = requests
+    .filter((r) => new Date(r.created_at) > new Date(Date.now() - 60000))
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+  if (recentRequests.length > 10) {
+    anomalies.push({
+      type: "rapid_requests",
+      message: `User ${userId} made ${recentRequests.length} requests in last minute`,
+      severity: "warning",
+    });
+  }
+
+  return anomalies;
+}
+
+// Run periodically
+setInterval(async () => {
+  const users = await getAllActiveUsers();
+  for (const user of users) {
+    const anomalies = await detectAnomalies(user.id);
+    if (anomalies.length > 0) {
+      console.warn("Anomalies detected:", anomalies);
+      // Send alert
+      await sendAlert(anomalies);
+    }
+  }
+}, 5 * 60 * 1000); // Every 5 minutes
+```
+</Tab>
+</Tabs>
+
+## Best Practices
+
+<AccordionGroup>
+<Accordion title="Always Track User IDs">
+Make user tracking a standard part of every request:
+
+```typescript
+// Good - consistent user tracking
+const makeRequest = async (userId: string, prompt: string) => {
+  return await client.chat.completions.create(
+    { model: "gpt-4o-mini", messages: [{ role: "user", content: prompt }] },
+    { headers: { "Helicone-User-Id": userId } }
+  );
+};
+
+// Avoid - missing user tracking
+const makeRequest = async (prompt: string) => {
+  return await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: prompt }],
+  });
+};
+```
+</Accordion>
+
+<Accordion title="Monitor Power Users">
+Regularly review your top users to understand patterns:
+
+```typescript
+// Weekly review of top users
+async function weeklyUserReview() {
+  const topUsersByCost = await getTopUsersByCost(10);
+  const topUsersByRequests = await getTopUsersByRequests(10);
+  
+  console.log("Top users by cost:", topUsersByCost);
+  console.log("Top users by requests:", topUsersByRequests);
+  
+  // Flag for review if costs are very high
+  for (const user of topUsersByCost) {
+    if (user.cost > 1000) {
+      await flagForReview(user.id, "High cost user");
+    }
+  }
+}
+```
+</Accordion>
+
+<Accordion title="Set Up Alerts">
+Create alerts for unusual user behavior:
+
+```typescript
+// Alert on high-cost users
+async function checkCostAlerts() {
+  const users = await getAllUsers();
+  
+  for (const user of users) {
+    const todayCost = await getUserCostToday(user.id);
+    
+    if (todayCost > user.dailyCostLimit) {
+      await sendAlert({
+        type: "cost_limit_exceeded",
+        userId: user.id,
+        cost: todayCost,
+        limit: user.dailyCostLimit,
+      });
+    }
+  }
+}
+```
+</Accordion>
+
+<Accordion title="Respect Privacy">
+Be mindful of user privacy when tracking:
+
+```typescript
+// Good - anonymous IDs
+"Helicone-User-Id": "user_abc123"
+"Helicone-Property-User-Tier": "premium"
+
+// Avoid - PII in tracking
+"Helicone-User-Id": "john.doe@example.com"
+"Helicone-Property-User-Name": "John Doe"
+```
+</Accordion>
+</AccordionGroup>
+
+## Related Features
+
+<CardGroup cols={2}>
+<Card title="Requests" icon="message" href="/observability/requests">
+View individual requests for each user
+</Card>
+
+<Card title="Cost Tracking" icon="dollar-sign" href="/observability/cost-tracking">
+Monitor and analyze costs per user
+</Card>
+
+<Card title="Custom Properties" icon="tag" href="/observability/custom-properties">
+Add user-specific metadata to requests
+</Card>
+
+<Card title="Sessions" icon="diagram-project" href="/observability/sessions">
+Track user workflows across multiple requests
+</Card>
+</CardGroup>
+
+<QuestionsSection />

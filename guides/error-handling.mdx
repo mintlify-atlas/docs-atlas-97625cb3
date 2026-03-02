@@ -1,0 +1,477 @@
+---
+title: Error Handling Strategies
+description: Implement robust error handling for production LLM applications
+---
+
+# Error Handling Strategies
+
+Learn how to handle errors gracefully in LLM applications with retries, fallbacks, and monitoring.
+
+## Common LLM Errors
+
+### Rate Limit Errors (429)
+
+**Cause:** Too many requests to the provider
+
+**Solution:** Implement exponential backoff
+
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3
+): Promise<T> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      if (error.status === 429 && i < maxRetries - 1) {
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = Math.pow(2, i) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error("Max retries exceeded");
+}
+
+// Usage
+const response = await withRetry(() =>
+  client.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: prompt }],
+  })
+);
+```
+
+### Timeout Errors
+
+**Cause:** Request takes too long
+
+**Solution:** Set appropriate timeouts
+
+```typescript
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+try {
+  const response = await client.chat.completions.create(
+    {
+      model: "gpt-4o",
+      messages: [{ role: "user", content: prompt }],
+    },
+    {
+      signal: controller.signal,
+    }
+  );
+  clearTimeout(timeoutId);
+  return response;
+} catch (error: any) {
+  clearTimeout(timeoutId);
+  if (error.name === "AbortError") {
+    console.error("Request timed out");
+    // Try with faster model
+    return await client.chat.completions.create({
+      model: "gpt-4o-mini", // Faster fallback
+      messages: [{ role: "user", content: prompt }],
+    });
+  }
+  throw error;
+}
+```
+
+### Content Filter Errors
+
+**Cause:** Request or response violates content policy
+
+**Solution:** Handle gracefully and provide user feedback
+
+```typescript
+try {
+  const response = await client.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: userInput }],
+  });
+  return response;
+} catch (error: any) {
+  if (error.status === 400 && error.message?.includes("content_filter")) {
+    return {
+      success: false,
+      error: "Your message contains content that cannot be processed. Please rephrase.",
+    };
+  }
+  throw error;
+}
+```
+
+## Automatic Fallbacks
+
+### Model Fallbacks
+
+Use Helicone's AI Gateway for automatic fallbacks:
+
+```typescript
+const response = await client.chat.completions.create({
+  model: "gpt-4o,claude-sonnet-4,gpt-4o-mini", // Try in order
+  messages: [{ role: "user", content: prompt }],
+  headers: {
+    "Helicone-Retry-Enabled": "true",
+  },
+});
+
+// Helicone automatically:
+// 1. Tries GPT-4o first
+// 2. Falls back to Claude if GPT-4o fails
+// 3. Falls back to GPT-4o-mini if Claude fails
+```
+
+### Provider Fallbacks
+
+```typescript
+const response = await client.chat.completions.create({
+  model: "gpt-4o/openai,gpt-4o/azure", // OpenAI first, then Azure
+  messages: [{ role: "user", content: prompt }],
+});
+```
+
+### Custom Fallback Logic
+
+```typescript
+async function robustLLMCall(prompt: string) {
+  const strategies = [
+    // Strategy 1: Primary model
+    { model: "gpt-4o", temperature: 0.7 },
+    // Strategy 2: Cheaper alternative
+    { model: "gpt-4o-mini", temperature: 0.7 },
+    // Strategy 3: Different provider
+    { model: "claude-sonnet-4", temperature: 0.7 },
+    // Strategy 4: Simplified prompt with cheaper model
+    { model: "gpt-4o-mini", temperature: 0, prompt: simplifyPrompt(prompt) },
+  ];
+
+  for (const strategy of strategies) {
+    try {
+      return await client.chat.completions.create({
+        model: strategy.model,
+        messages: [{ role: "user", content: strategy.prompt || prompt }],
+        temperature: strategy.temperature,
+      });
+    } catch (error) {
+      console.warn(`Strategy failed: ${strategy.model}`, error);
+      // Try next strategy
+    }
+  }
+
+  throw new Error("All fallback strategies failed");
+}
+```
+
+## Circuit Breaker Pattern
+
+Prevent cascading failures:
+
+```typescript
+class CircuitBreaker {
+  private failures = 0;
+  private lastFailureTime?: number;
+  private state: "closed" | "open" | "half-open" = "closed";
+
+  constructor(
+    private threshold = 5,
+    private timeout = 60000 // 1 minute
+  ) {}
+
+  async execute<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.state === "open") {
+      if (Date.now() - this.lastFailureTime! > this.timeout) {
+        this.state = "half-open";
+      } else {
+        throw new Error("Circuit breaker is open");
+      }
+    }
+
+    try {
+      const result = await fn();
+      this.onSuccess();
+      return result;
+    } catch (error) {
+      this.onFailure();
+      throw error;
+    }
+  }
+
+  private onSuccess() {
+    this.failures = 0;
+    this.state = "closed";
+  }
+
+  private onFailure() {
+    this.failures++;
+    this.lastFailureTime = Date.now();
+    if (this.failures >= this.threshold) {
+      this.state = "open";
+    }
+  }
+}
+
+// Usage
+const circuitBreaker = new CircuitBreaker();
+
+const response = await circuitBreaker.execute(() =>
+  client.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: prompt }],
+  })
+);
+```
+
+## Graceful Degradation
+
+### Provide Fallback Responses
+
+```typescript
+async function chatWithFallback(message: string) {
+  try {
+    // Try AI response
+    const response = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: message }],
+    });
+    return response.choices[0].message.content;
+  } catch (error) {
+    console.error("AI failed, using fallback", error);
+
+    // Fallback to rule-based responses
+    return getRuleBasedResponse(message) || 
+      "I'm having trouble right now. Please try again later or contact support.";
+  }
+}
+
+function getRuleBasedResponse(message: string): string | null {
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes("pricing") || lowerMessage.includes("cost")) {
+    return "You can view our pricing at https://example.com/pricing";
+  }
+
+  if (lowerMessage.includes("support") || lowerMessage.includes("help")) {
+    return "Please contact support at support@example.com or visit our help center.";
+  }
+
+  return null;
+}
+```
+
+### Cache Previous Responses
+
+```typescript
+const responseCache = new Map<string, string>();
+
+async function cachedLLMCall(prompt: string) {
+  try {
+    const response = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: prompt }],
+      headers: {
+        "Helicone-Cache-Enabled": "true",
+      },
+    });
+
+    const content = response.choices[0].message.content;
+    responseCache.set(prompt, content); // Cache locally too
+    return content;
+  } catch (error) {
+    // If error, try to return cached response
+    const cached = responseCache.get(prompt);
+    if (cached) {
+      console.warn("Using cached response due to error");
+      return cached;
+    }
+    throw error;
+  }
+}
+```
+
+## Error Monitoring
+
+### Track Errors in Helicone
+
+```typescript
+try {
+  const response = await client.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: prompt }],
+    headers: {
+      "Helicone-Property-User-Id": userId,
+      "Helicone-Property-Feature": "chat",
+    },
+  });
+  return response;
+} catch (error: any) {
+  // Error is automatically logged in Helicone
+  // View in dashboard under "Requests" filtered by status code
+
+  // Add additional context
+  console.error("LLM Error:", {
+    error: error.message,
+    status: error.status,
+    userId,
+    feature: "chat",
+  });
+
+  throw error;
+}
+```
+
+### Set Up Error Alerts
+
+<Steps>
+  <Step title="Configure alert thresholds">
+    Go to **Settings** → **Alerts** in Helicone dashboard
+  </Step>
+
+  <Step title="Set error rate threshold">
+    Alert when error rate exceeds 5% over 10 minutes
+  </Step>
+
+  <Step title="Configure notifications">
+    Send alerts via email, Slack, or webhook
+  </Step>
+</Steps>
+
+### Webhook for Error Notifications
+
+```typescript
+app.post("/webhooks/helicone-errors", (req, res) => {
+  const alert = req.body;
+
+  if (alert.type === "high_error_rate") {
+    // Alert: Error rate above threshold
+    notifyTeam({
+      title: "High LLM Error Rate",
+      message: `Error rate: ${alert.error_rate}%`,
+      severity: "high",
+      details: alert,
+    });
+
+    // Take action
+    if (alert.error_rate > 20) {
+      // Switch to fallback mode
+      enableFallbackMode();
+    }
+  }
+
+  res.status(200).send("OK");
+});
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Implement Retries" icon="rotate">
+    Most errors are transient. Always retry with exponential backoff:
+    
+    ```typescript
+    const response = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: prompt }],
+      headers: {
+        "Helicone-Retry-Enabled": "true",
+      },
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Use Multiple Providers" icon="network-wired">
+    Don't rely on a single provider. Configure fallbacks:
+    
+    ```typescript
+    model: "gpt-4o/openai,claude-sonnet-4/anthropic,gpt-4o/azure"
+    ```
+  </Accordion>
+
+  <Accordion title="Monitor Error Patterns" icon="chart-line">
+    Track error types and frequencies:
+    - Which models fail most often?
+    - What time of day has most errors?
+    - Which users are affected?
+    - Are errors correlated with input types?
+  </Accordion>
+
+  <Accordion title="Test Failure Scenarios" icon="vial">
+    Regularly test your error handling:
+    - Simulate rate limits
+    - Test with invalid inputs
+    - Test timeout handling
+    - Verify fallback behavior
+  </Accordion>
+
+  <Accordion title="Provide User Feedback" icon="message">
+    Always inform users when things fail:
+    - "We're experiencing high demand. Please try again."
+    - "Your request couldn't be processed. Please rephrase."
+    - "Service temporarily unavailable. Using cached response."
+  </Accordion>
+</AccordionGroup>
+
+## Error Categories
+
+### Client Errors (4xx)
+
+| Status | Cause | Solution |
+|--------|-------|----------|
+| 400 | Invalid request format | Validate input before sending |
+| 401 | Invalid API key | Check authentication |
+| 403 | Forbidden content | Review content policies |
+| 404 | Model not found | Check model name |
+| 429 | Rate limit | Implement retries |
+
+### Server Errors (5xx)
+
+| Status | Cause | Solution |
+|--------|-------|----------|
+| 500 | Internal server error | Retry with backoff |
+| 502 | Bad gateway | Use fallback provider |
+| 503 | Service unavailable | Enable circuit breaker |
+| 504 | Gateway timeout | Reduce prompt size |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Fallbacks"
+    icon="arrows-split-up-and-left"
+    href="/gateway/fallbacks"
+  >
+    Configure automatic fallbacks
+  </Card>
+  <Card
+    title="Debugging"
+    icon="bug"
+    href="/guides/debugging"
+  >
+    Debug LLM applications
+  </Card>
+  <Card
+    title="Monitoring"
+    icon="chart-line"
+    href="/observability/overview"
+  >
+    Monitor application health
+  </Card>
+  <Card
+    title="Alerts"
+    icon="bell"
+    href="/observability/overview"
+  >
+    Set up error alerts
+  </Card>
+</CardGroup>

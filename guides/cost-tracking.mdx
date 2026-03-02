@@ -1,0 +1,511 @@
+---
+title: Tracking and Optimizing LLM Costs
+description: Monitor, analyze, and reduce your LLM API costs with Helicone's cost tracking features
+---
+
+# Tracking and Optimizing LLM Costs
+
+Learn how to track LLM costs across models and users, set up budget alerts, and implement strategies to reduce your AI spending.
+
+## Overview
+
+Helicone automatically tracks costs for every LLM request across 300+ models and providers. This guide shows you how to monitor costs and implement optimization strategies.
+
+## Automatic Cost Tracking
+
+### How It Works
+
+Helicone calculates costs based on:
+- **Token usage**: Input and output tokens
+- **Model pricing**: Real-time pricing from provider APIs
+- **Additional features**: Caching, function calls, embeddings
+- **Provider-specific pricing**: Regional variations and special pricing
+
+<Note>
+  Costs are calculated automatically for all requests through the AI Gateway or proxy. No additional configuration needed.
+</Note>
+
+## Viewing Costs in Dashboard
+
+### Overall Cost Metrics
+
+1. Navigate to the **Dashboard** in Helicone
+2. View total costs over time
+3. Filter by date range, model, or user
+4. See cost breakdowns by:
+   - Model
+   - User
+   - Provider
+   - Custom property
+
+### Per-Request Costs
+
+View detailed costs for individual requests:
+
+```typescript
+// Each request automatically includes cost data
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: "Hello" }],
+});
+
+// View cost in Helicone dashboard:
+// - Input tokens × input price
+// - Output tokens × output price
+// - Total cost
+```
+
+## Cost Tracking by User
+
+### Track Per-User Costs
+
+Add user IDs to track costs by user:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import OpenAI from "openai";
+    
+    const client = new OpenAI({
+      baseURL: "https://ai-gateway.helicone.ai",
+      apiKey: process.env.HELICONE_API_KEY,
+    });
+    
+    const response = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Hello" }],
+      user: "user_123", // Standard OpenAI user field
+      headers: {
+        "Helicone-Property-User-Id": "user_123", // Or use custom property
+      },
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    from openai import OpenAI
+    
+    client = OpenAI(
+        base_url="https://ai-gateway.helicone.ai",
+        api_key=os.getenv("HELICONE_API_KEY"),
+    )
+    
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": "Hello"}],
+        user="user_123",  # Standard OpenAI user field
+        extra_headers={
+            "Helicone-Property-User-Id": "user_123",  # Or use custom property
+        },
+    )
+    ```
+  </Tab>
+</Tabs>
+
+### Query User Costs
+
+Retrieve cost data per user via API:
+
+```bash
+curl -X POST https://api.helicone.ai/v1/user/metrics/query \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filter": {
+      "user_ids": ["user_123"]
+    },
+    "timeFilter": {
+      "start": "2024-01-01T00:00:00Z",
+      "end": "2024-01-31T23:59:59Z"
+    }
+  }'
+```
+
+Response includes:
+```json
+{
+  "data": [
+    {
+      "user_id": "user_123",
+      "total_cost": 15.42,
+      "total_requests": 523,
+      "total_tokens": 125000,
+      "average_cost_per_request": 0.029
+    }
+  ]
+}
+```
+
+## Cost Optimization Strategies
+
+### 1. Model Selection
+
+Choose cost-effective models for each task:
+
+<AccordionGroup>
+  <Accordion title="Use Smaller Models When Possible" icon="sparkles">
+    Replace expensive models with cheaper alternatives:
+    
+    ```typescript
+    // Before: $0.03 per 1K tokens
+    model: "gpt-4o"
+    
+    // After: $0.0001 per 1K tokens (300x cheaper)
+    model: "gpt-4o-mini"
+    ```
+    
+    Use expensive models only for:
+    - Complex reasoning tasks
+    - Creative content generation
+    - Critical decision-making
+    
+    Use cheaper models for:
+    - Simple classification
+    - Data extraction
+    - Summarization
+    - Embeddings
+  </Accordion>
+  
+  <Accordion title="Implement Intelligent Routing" icon="route">
+    Route requests to different models based on complexity:
+    
+    ```typescript
+    async function smartRoute(prompt: string) {
+      const complexity = analyzeComplexity(prompt);
+      
+      const model = complexity > 0.7
+        ? "gpt-4o"           // Complex tasks
+        : "gpt-4o-mini";     // Simple tasks
+      
+      return await client.chat.completions.create({
+        model,
+        messages: [{ role: "user", content: prompt }],
+      });
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Use Provider Routing" icon="server">
+    Route to cheaper providers for equivalent quality:
+    
+    ```typescript
+    // Try multiple providers, cheapest first
+    const response = await client.chat.completions.create({
+      model: "llama-3.3-70b/together,gpt-4o",
+      messages: [{ role: "user", content: prompt }],
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### 2. Caching
+
+Reduce costs by caching repeated requests:
+
+```typescript
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: "What is 2+2?" }],
+  headers: {
+    "Helicone-Cache-Enabled": "true",
+    "Cache-Control": "max-age=86400", // Cache for 24 hours
+  },
+});
+
+// Subsequent identical requests return cached response
+// Cost: $0 (100% savings)
+```
+
+<Tip>
+  Caching works best for:
+  - Static content (FAQs, documentation)
+  - Embeddings for unchanged documents
+  - Translation of fixed text
+  - Classification of similar inputs
+</Tip>
+
+### 3. Prompt Optimization
+
+Reduce token usage with efficient prompts:
+
+<Tabs>
+  <Tab title="Before">
+    ```typescript
+    // Verbose prompt: ~100 tokens
+    const prompt = `
+      I would like you to please analyze the following text
+      and provide a detailed summary of the main points.
+      Please make sure to include all important information
+      and present it in a clear and organized manner.
+      
+      Text: ${longText}
+    `;
+    ```
+  </Tab>
+  <Tab title="After">
+    ```typescript
+    // Concise prompt: ~20 tokens (80% reduction)
+    const prompt = `Summarize key points:\n\n${longText}`;
+    ```
+  </Tab>
+</Tabs>
+
+### 4. Token Limits
+
+Set maximum token limits to prevent runaway costs:
+
+```typescript
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: prompt }],
+  max_tokens: 500, // Limit output to 500 tokens
+});
+```
+
+### 5. Streaming Optimization
+
+Use streaming to provide faster UX and stop early:
+
+```typescript
+const stream = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: prompt }],
+  stream: true,
+});
+
+for await (const chunk of stream) {
+  const content = chunk.choices[0]?.delta?.content;
+  
+  // Stop streaming if we have enough content
+  if (hasEnoughContent(content)) {
+    break; // Saves tokens and cost
+  }
+}
+```
+
+### 6. Batch Processing
+
+Use OpenAI's Batch API for 50% cost savings:
+
+```typescript
+// Submit batch job (50% cheaper)
+const batch = await client.batches.create({
+  input_file_id: fileId,
+  endpoint: "/v1/chat/completions",
+  completion_window: "24h",
+});
+
+// Process results when ready
+const results = await client.batches.retrieve(batch.id);
+```
+
+## Budget Alerts
+
+### Set Up Cost Alerts
+
+<Steps>
+  <Step title="Navigate to Alerts">
+    Go to **Settings** → **Alerts** in the Helicone dashboard
+  </Step>
+  
+  <Step title="Create Alert Rule">
+    Configure alert thresholds:
+    - Daily/weekly/monthly limits
+    - Per-user limits
+    - Per-model limits
+    - Custom property filters
+  </Step>
+  
+  <Step title="Configure Notifications">
+    Choose notification method:
+    - Email alerts
+    - Webhook to your system
+    - Slack integration
+  </Step>
+</Steps>
+
+### Webhook Example
+
+Receive cost alerts via webhook:
+
+```typescript
+// Your webhook endpoint
+app.post("/webhooks/helicone", (req, res) => {
+  const alert = req.body;
+  
+  if (alert.type === "cost_threshold") {
+    // Alert: Daily budget exceeded
+    console.log(`Cost alert: $${alert.current_cost} / $${alert.threshold}`);
+    
+    // Take action:
+    // - Notify admin
+    // - Pause non-critical workloads
+    // - Switch to cheaper models
+    
+    sendAdminNotification(alert);
+  }
+  
+  res.status(200).send("OK");
+});
+```
+
+## Cost Analysis
+
+### Analyze Cost Trends
+
+Query historical costs to identify trends:
+
+```bash
+curl -X POST https://api.helicone.ai/v1/request/query \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filter": {
+      "request_created_at": {
+        "gte": "2024-01-01T00:00:00Z",
+        "lt": "2024-02-01T00:00:00Z"
+      }
+    },
+    "metrics": ["cost", "tokens"]
+  }'
+```
+
+### Cost by Model
+
+Identify which models are most expensive:
+
+1. Go to **Analytics** → **Cost Breakdown**
+2. Group by **Model**
+3. Sort by **Total Cost**
+4. Identify opportunities to switch models
+
+### Cost by Feature
+
+Break down costs by application feature:
+
+```typescript
+// Tag requests by feature
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: prompt }],
+  headers: {
+    "Helicone-Property-Feature": "chatbot", // or "search", "summary", etc.
+  },
+});
+
+// Analyze costs by feature in dashboard
+```
+
+## Customer Billing
+
+### Pass Through Costs to Customers
+
+Implement cost-based billing:
+
+```typescript
+// Track costs per customer
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: prompt }],
+  headers: {
+    "Helicone-Property-Customer-Id": customerId,
+  },
+});
+
+// Query monthly costs per customer
+const costs = await queryCustomerCosts(customerId, startDate, endDate);
+
+// Bill customer based on usage
+await createInvoice(customerId, costs.total_cost * 1.5); // 50% markup
+```
+
+## Real-World Cost Savings
+
+<AccordionGroup>
+  <Accordion title="Case Study: 75% Cost Reduction" icon="piggy-bank">
+    **Before:**
+    - All requests to GPT-4o
+    - No caching
+    - Average cost: $1,200/month
+    
+    **After:**
+    - 70% of requests to GPT-4o-mini
+    - Caching enabled for FAQs
+    - Batch processing for reports
+    - Average cost: $300/month
+    
+    **Savings: $10,800/year**
+  </Accordion>
+  
+  <Accordion title="Case Study: Smart Routing" icon="route">
+    **Strategy:**
+    - Simple queries → GPT-4o-mini ($0.0001/1K)
+    - Complex queries → GPT-4o ($0.03/1K)
+    - Caching for repeated questions
+    
+    **Results:**
+    - 85% of queries handled by mini model
+    - 40% cache hit rate
+    - 60% total cost reduction
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Monitor Costs Daily" icon="chart-line">
+    - Check dashboard daily
+    - Set up daily cost reports
+    - Investigate unexpected spikes
+    - Review cost trends weekly
+  </Accordion>
+  
+  <Accordion title="Implement Progressive Optimization" icon="stairs">
+    Start with quick wins:
+    1. Enable caching (immediate 20-40% savings)
+    2. Switch simple tasks to cheaper models (40-60% savings)
+    3. Optimize prompts (10-30% savings)
+    4. Implement smart routing (20-50% additional savings)
+  </Accordion>
+  
+  <Accordion title="Track ROI of LLM Features" icon="dollar-sign">
+    Measure cost vs. value:
+    - Cost per user interaction
+    - Revenue per LLM-powered feature
+    - Customer satisfaction impact
+    - Support ticket reduction
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Cost Tracking"
+    icon="dollar-sign"
+    href="/observability/cost-tracking"
+  >
+    Detailed cost tracking documentation
+  </Card>
+  <Card
+    title="Caching"
+    icon="database"
+    href="/gateway/caching"
+  >
+    Learn about request caching
+  </Card>
+  <Card
+    title="Provider Routing"
+    icon="route"
+    href="/gateway/routing"
+  >
+    Intelligent model routing guide
+  </Card>
+  <Card
+    title="User Metrics"
+    icon="users"
+    href="/observability/user-metrics"
+  >
+    Track per-user costs and usage
+  </Card>
+</CardGroup>

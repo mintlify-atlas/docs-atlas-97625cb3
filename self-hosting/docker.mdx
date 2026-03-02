@@ -1,0 +1,409 @@
+---
+title: Docker Deployment
+description: Deploy Helicone using Docker Compose for quick setup and development
+---
+
+Deploy Helicone using Docker Compose for a complete self-hosted setup. This method is ideal for development, testing, and small to medium production deployments.
+
+## Quick Start: All-in-One Container
+
+For the simplest deployment, use the all-in-one Docker image:
+
+```bash
+# Pull the latest image
+docker pull helicone/helicone-all-in-one:latest
+
+# Run the container
+docker run -d \
+  --name helicone \
+  -p 3000:3000 \
+  -p 8585:8585 \
+  -p 9080:9080 \
+  helicone/helicone-all-in-one:latest
+```
+
+**Access Points:**
+- Web dashboard: `http://localhost:3000`
+- Jawn API + LLM proxy: `http://localhost:8585`
+- MinIO S3 storage: `http://localhost:9080`
+
+<Note>
+  The all-in-one container is great for testing, but for production deployments use Docker Compose for better control and scalability.
+</Note>
+
+## Full Docker Compose Setup
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/engine/install/) (version 20.10 or higher)
+- [Docker Compose](https://docs.docker.com/compose/install/) (version 2.0 or higher)
+- At least 8GB RAM available
+- 20GB+ free disk space
+
+### Installation Steps
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/Helicone/helicone.git
+    cd helicone/docker
+    ```
+  </Step>
+
+  <Step title="Configure environment">
+    Copy the example environment file and customize it:
+    
+    ```bash
+    cp .env.example .env
+    ```
+    
+    Edit `.env` and update the following critical values:
+    
+    ```bash
+    # Change these for production!
+    BETTER_AUTH_SECRET="your-super-secret-key-min-32-chars"
+    POSTGRES_PASSWORD="your-secure-database-password"
+    
+    # Optional: Configure ports
+    JAWN_PORT=8585
+    JAWN_PUBLIC_URL=http://localhost:8585
+    ```
+    
+    <Warning>
+      Always change `BETTER_AUTH_SECRET` and `POSTGRES_PASSWORD` before deploying to production!
+    </Warning>
+  </Step>
+
+  <Step title="Start services">
+    Use the helper script to start all services:
+    
+    ```bash
+    ./helicone-compose.sh helicone up
+    ```
+    
+    This starts:
+    - Infrastructure (PostgreSQL, ClickHouse, MinIO, Redis)
+    - Migrations (automatically applied)
+    - Jawn API server
+    - Web dashboard
+  </Step>
+
+  <Step title="Verify deployment">
+    Check that all services are running:
+    
+    ```bash
+    ./helicone-compose.sh helicone ps
+    ```
+    
+    Access the dashboard at `http://localhost:3000`
+  </Step>
+</Steps>
+
+## Deployment Profiles
+
+The `helicone-compose.sh` script supports multiple deployment profiles:
+
+<Tabs>
+  <Tab title="Infrastructure Only">
+    Start just the infrastructure services (databases, storage):
+    
+    ```bash
+    ./helicone-compose.sh infra up
+    ```
+    
+    Includes:
+    - PostgreSQL
+    - ClickHouse
+    - MinIO
+    - Redis
+    - MailHog (email testing)
+  </Tab>
+
+  <Tab title="Full Helicone">
+    Start complete Helicone stack:
+    
+    ```bash
+    ./helicone-compose.sh helicone up
+    ```
+    
+    Includes infrastructure + Jawn + Web
+  </Tab>
+
+  <Tab title="Development Mode">
+    Start with hot-reload for development:
+    
+    ```bash
+    ./helicone-compose.sh dev up
+    ```
+    
+    Mounts source code as volumes for live changes
+  </Tab>
+
+  <Tab title="With Workers">
+    Start infrastructure and worker services:
+    
+    ```bash
+    ./helicone-compose.sh workers up
+    ```
+    
+    Includes separate worker containers for:
+    - OpenAI Proxy (port 8787)
+    - Anthropic Proxy (port 8790)
+    - Helicone API (port 8788)
+    - Gateway API (port 8789)
+  </Tab>
+
+  <Tab title="Everything">
+    Start all services including Kafka:
+    
+    ```bash
+    ./helicone-compose.sh all up
+    ```
+  </Tab>
+</Tabs>
+
+## Common Commands
+
+### View Logs
+
+```bash
+# View all logs
+./helicone-compose.sh helicone logs
+
+# Follow logs for specific service
+./helicone-compose.sh helicone logs -f jawn
+
+# View last 100 lines
+./helicone-compose.sh helicone logs --tail=100
+```
+
+### Restart Services
+
+```bash
+# Restart all services
+./helicone-compose.sh helicone restart
+
+# Restart specific service
+docker compose --profile include-helicone restart jawn
+```
+
+### Stop Services
+
+```bash
+# Stop all services (keeps data)
+./helicone-compose.sh helicone down
+
+# Stop and remove volumes (deletes all data)
+./helicone-compose.sh helicone down -v
+```
+
+### Rebuild Services
+
+```bash
+# Rebuild all containers
+./helicone-compose.sh helicone build
+
+# Rebuild and restart
+./helicone-compose.sh helicone up --build
+```
+
+## Service Configuration
+
+### Jawn (API Server)
+
+The Jawn service configuration in `docker-compose.yml`:
+
+```yaml
+jawn:
+  ports:
+    - "8585:8585"
+  environment:
+    PORT: 8585
+    S3_ENDPOINT: http://minio:9000
+    S3_ACCESS_KEY: minioadmin
+    S3_SECRET_KEY: minioadmin
+    S3_BUCKET_NAME: request-response-storage
+    CLICKHOUSE_HOST: http://clickhouse:8123
+    SUPABASE_DATABASE_URL: postgres://postgres:testpassword@db:5432/helicone_test
+```
+
+### Web Dashboard
+
+```yaml
+web:
+  ports:
+    - "3000:3000"
+  environment:
+    NEXT_PUBLIC_HELICONE_JAWN_SERVICE: http://localhost:8585
+    DATABASE_URL: postgres://postgres:testpassword@db:5432/helicone_test
+```
+
+## Production Considerations
+
+<AccordionGroup>
+  <Accordion title="Use External Databases" icon="database">
+    For production, use managed database services:
+    
+    ```bash
+    # .env
+    SUPABASE_DATABASE_URL=postgres://user:pass@your-postgres-host:5432/helicone
+    CLICKHOUSE_HOST=https://your-clickhouse-host:8443
+    CLICKHOUSE_USER=your_user
+    CLICKHOUSE_PASSWORD=your_password
+    ```
+    
+    Then disable local database containers in `docker-compose.yml`
+  </Accordion>
+
+  <Accordion title="Configure S3 Storage" icon="box">
+    Use AWS S3 or compatible service instead of MinIO:
+    
+    ```bash
+    # .env
+    S3_ENDPOINT=https://s3.amazonaws.com
+    S3_ACCESS_KEY=your_aws_access_key
+    S3_SECRET_KEY=your_aws_secret_key
+    S3_BUCKET_NAME=your-helicone-bucket
+    S3_PROMPT_BUCKET_NAME=your-prompts-bucket
+    S3_ENDPOINT_PUBLIC=https://s3.amazonaws.com
+    ```
+  </Accordion>
+
+  <Accordion title="Enable HTTPS" icon="lock">
+    Use a reverse proxy like Nginx or Traefik:
+    
+    ```nginx
+    server {
+      listen 443 ssl;
+      server_name helicone.yourdomain.com;
+      
+      ssl_certificate /path/to/cert.pem;
+      ssl_certificate_key /path/to/key.pem;
+      
+      location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+      }
+      
+      location /api {
+        proxy_pass http://localhost:8585;
+        proxy_set_header Host $host;
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Configure Email" icon="envelope">
+    Replace MailHog with real SMTP:
+    
+    ```bash
+    # .env (in web service)
+    SMTP_HOST=smtp.gmail.com
+    SMTP_PORT=587
+    SMTP_SECURE=true
+    SMTP_USER=your-email@gmail.com
+    SMTP_PASS=your-app-password
+    ```
+  </Accordion>
+
+  <Accordion title="Resource Limits" icon="gauge">
+    Add resource limits to `docker-compose.yml`:
+    
+    ```yaml
+    clickhouse:
+      deploy:
+        resources:
+          limits:
+            cpus: '4'
+            memory: 8G
+          reservations:
+            cpus: '2'
+            memory: 4G
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Services won't start" icon="circle-exclamation">
+    Check Docker resources:
+    
+    ```bash
+    # Verify Docker has enough resources
+    docker system df
+    docker system prune -a  # Clean up if needed
+    
+    # Check service health
+    docker ps -a
+    
+    # View service logs
+    docker logs helicone-jawn
+    docker logs helicone-clickhouse
+    ```
+  </Accordion>
+
+  <Accordion title="Database connection errors" icon="database">
+    Ensure databases are healthy before starting services:
+    
+    ```bash
+    # Check database health
+    docker exec helicone-postgres-flyway-test pg_isready
+    docker exec helicone-clickhouse wget --spider http://localhost:8123/ping
+    
+    # Restart migrations
+    docker compose up migrations --force-recreate
+    ```
+  </Accordion>
+
+  <Accordion title="Port conflicts" icon="ban">
+    Change ports in `.env` if they're already in use:
+    
+    ```bash
+    JAWN_PORT=8586  # Instead of 8585
+    # Update docker-compose.yml port mappings accordingly
+    ```
+  </Accordion>
+
+  <Accordion title="Migration failures" icon="triangle-exclamation">
+    Reset and reapply migrations:
+    
+    ```bash
+    # Stop all services
+    ./helicone-compose.sh helicone down -v
+    
+    # Start fresh
+    ./helicone-compose.sh helicone up
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Updating Helicone
+
+To update to the latest version:
+
+```bash
+# Pull latest code
+cd helicone
+git pull origin main
+
+# Rebuild and restart
+cd docker
+./helicone-compose.sh helicone down
+./helicone-compose.sh helicone up --build
+```
+
+<Warning>
+  Always backup your data before updating. Migrations will run automatically, but it's best to have a backup.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/self-hosting/configuration">
+    Learn about all environment variables and configuration options
+  </Card>
+  <Card title="Kubernetes" icon="kubernetes" href="/self-hosting/kubernetes">
+    Deploy to Kubernetes for production scale
+  </Card>
+</CardGroup>

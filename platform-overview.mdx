@@ -1,0 +1,700 @@
+---
+title: "Platform Overview"
+description: "Learn about Helicone's architecture, core components, and how they work together to provide comprehensive LLM observability and AI Gateway capabilities."
+---
+
+## Architecture Overview
+
+Helicone is built as a modern, scalable platform designed to handle high-volume LLM workloads with low latency. The platform consists of five core services that work together to provide observability, routing, and management capabilities.
+
+<img src="/images/architecture-diagram.svg" alt="Helicone Architecture" />
+
+## Core Services
+
+### Web Platform (Next.js)
+
+The **Web Platform** is the user-facing dashboard built with Next.js, providing a rich interface for monitoring, analyzing, and managing LLM applications.
+
+**Location:** `web/` directory in the monorepo
+
+**Key Features:**
+- **Dashboard**: Real-time analytics, charts, and metrics visualization
+- **Request Explorer**: Inspect individual requests with full payload details
+- **Session Viewer**: Hierarchical traces for multi-step agent workflows
+- **Prompt Management**: Version control and deployment interface for prompts
+- **Evaluation Tools**: Score requests, create datasets, run experiments
+- **User Management**: Team collaboration, API key management, billing
+
+**Tech Stack:**
+- Next.js 14 with App Router
+- React for UI components
+- TailwindCSS for styling
+- Supabase for authentication
+- TypeScript throughout
+
+**Integration:**
+- Communicates with Jawn API for all data operations
+- Uses Supabase Auth for user authentication
+- Connects to ClickHouse for analytics queries
+
+---
+
+### Worker (Cloudflare Workers)
+
+The **Worker** service handles all proxy logging for incoming LLM requests, running on Cloudflare's edge network for global low-latency access.
+
+**Location:** `worker/` directory
+
+**Responsibilities:**
+- **Request Proxying**: Forward requests to LLM providers (OpenAI, Anthropic, etc.)
+- **AI Gateway Routing**: Intelligent model routing with fallback support
+- **Request Logging**: Capture request/response data asynchronously
+- **Authentication**: Validate Helicone API keys
+- **Header Processing**: Extract and process Helicone-specific headers
+- **Caching**: Response caching for identical requests
+- **Rate Limiting**: Request throttling based on user limits
+
+**Tech Stack:**
+- Cloudflare Workers (V8 isolates)
+- TypeScript
+- Hono framework for routing
+- Cloudflare KV for caching
+- Durable Objects for rate limiting and wallet management
+
+**Key Components:**
+
+```typescript
+// Example: Worker request flow
+1. Receive request at edge location
+2. Validate Helicone API key
+3. Extract Helicone headers (Session-Id, Properties, etc.)
+4. Forward to provider (OpenAI, Anthropic, etc.)
+5. Capture response
+6. Log to Jawn asynchronously
+7. Return response to client
+```
+
+**AI Gateway Architecture:**
+
+The worker includes sophisticated AI Gateway logic:
+
+- **AttemptBuilder**: Builds ordered list of provider attempts (BYOK first, then PTB)
+- **AttemptExecutor**: Executes individual attempts with escrow management
+- **SimpleAIGateway**: Orchestrates the complete request lifecycle
+- **Provider Helpers**: Transform requests between OpenAI format and provider-specific formats
+
+---
+
+### Jawn (API Server)
+
+**Jawn** is the core API server built with Express and TypeScript, providing REST endpoints for all data operations.
+
+**Location:** `valhalla/jawn/` directory
+
+**Architecture Pattern:**
+
+Jawn follows a clean layered architecture:
+
+```
+Request Flow: Controllers → Managers → [Stores, Clients, Wrappers]
+```
+
+**Directory Structure:**
+
+```
+src/
+├── controllers/       # REST endpoint handlers (TSOA-generated)
+│   ├── userController.ts
+│   ├── requestController.ts
+│   ├── sessionController.ts
+│   └── promptController.ts
+├── managers/          # Business logic layer
+│   ├── userManager.ts
+│   ├── requestManager.ts
+│   └── sessionManager.ts
+├── lib/
+│   ├── stores/        # Database operations
+│   │   ├── AlertStore.ts
+│   │   ├── RequestStore.ts
+│   │   └── SessionStore.ts
+│   ├── wrappers/      # Database client wrappers
+│   │   ├── ClickhouseWrapper.ts
+│   │   └── SupabaseWrapper.ts
+│   └── clients/       # External service clients
+│       ├── S3Client.ts
+│       └── OpenAIClient.ts
+├── types/             # TypeScript type definitions
+└── utils/             # Utility functions
+```
+
+**Responsibilities:**
+
+1. **Request Queries**: Query and filter LLM requests
+2. **Session Management**: Create, update, and query sessions
+3. **Prompt Operations**: CRUD operations for prompts and versions
+4. **User Management**: User data, organization settings, API keys
+5. **Evaluation APIs**: Create datasets, run experiments, score requests
+6. **Webhook Management**: Configure and trigger webhooks
+7. **Data Export**: Export request data via REST API
+
+**Tech Stack:**
+- Express.js for HTTP server
+- TSOA for type-safe routing and OpenAPI generation
+- TypeScript
+- Supabase (PostgreSQL) for application data
+- ClickHouse for analytics queries
+- S3/MinIO for object storage
+
+**Example: Creating an Endpoint**
+
+Jawn uses TSOA for auto-generated, type-safe endpoints:
+
+```typescript
+// Controller
+@Route("requests")
+export class RequestController extends Controller {
+  @Post("query")
+  @Security("api_key")
+  public async queryRequests(
+    @Body() query: RequestQuery
+  ): Promise<RequestResponse[]> {
+    const manager = new RequestManager();
+    return await manager.queryRequests(query);
+  }
+}
+
+// Manager (Business Logic)
+export class RequestManager {
+  async queryRequests(query: RequestQuery): Promise<RequestResponse[]> {
+    const store = new RequestStore();
+    return await store.getRequests(query);
+  }
+}
+
+// Store (Database Operations)
+export class RequestStore {
+  async getRequests(query: RequestQuery): Promise<RequestResponse[]> {
+    const db = new ClickhouseWrapper();
+    return await db.query(/* SQL query */);
+  }
+}
+```
+
+**Auto-Generated Types:**
+
+Types are auto-generated and shared across services:
+- `valhalla/jawn/src/tsoa-build/` - Generated TSOA types
+- `web/lib/clients/jawnTypes/` - Web platform types
+- `worker/supabase/database.types.ts` - Supabase types
+
+<Warning>
+**Do not manually edit auto-generated type files!** They are regenerated on build.
+</Warning>
+
+---
+
+### Supabase (PostgreSQL)
+
+**Supabase** provides the application database and authentication layer.
+
+**Location:** `supabase/` directory
+
+**Responsibilities:**
+- **User Authentication**: Email/password, OAuth, magic links
+- **Organization Data**: Organizations, teams, memberships
+- **API Keys**: Helicone API key storage and validation
+- **Prompts**: Prompt templates and version metadata
+- **User Settings**: Preferences, notification settings
+- **Webhook Configuration**: Webhook endpoints and triggers
+
+**Key Tables:**
+- `users`: User accounts and profiles
+- `organizations`: Organization/workspace data
+- `api_keys`: Helicone API keys
+- `prompts`: Prompt templates
+- `prompt_versions`: Versioned prompts
+- `provider_keys`: User's provider API keys (BYOK)
+
+**Migrations:**
+
+Database migrations are stored in `supabase/migrations/`
+
+```bash
+# Run migrations locally
+cd docker
+./helicone-compose.sh helicone up
+```
+
+---
+
+### ClickHouse (Analytics Database)
+
+**ClickHouse** is a high-performance columnar database used for analytics and time-series data.
+
+**Location:** `clickhouse/` directory
+
+**Responsibilities:**
+- **Request Logs**: Store all LLM request/response data
+- **Usage Analytics**: Aggregate metrics (cost, tokens, latency)
+- **Session Traces**: Multi-step agent interaction data
+- **Time-Series Queries**: Fast queries on billions of requests
+- **Custom Properties**: Flexible property filtering and aggregation
+
+**Key Tables:**
+- `request_response_log`: Primary table for all requests
+- `request_response_versioned`: Versioned request data
+- `property`: Custom properties attached to requests
+- `cache_hits`: Cache usage tracking
+- `feedback`: User feedback and scores
+
+**Query Performance:**
+
+ClickHouse is optimized for analytical queries:
+- **Columnar Storage**: Only read columns needed for query
+- **Compression**: 10-100x compression ratios
+- **Parallel Processing**: Utilize all CPU cores
+- **Materialized Views**: Pre-aggregated data for common queries
+
+**Example Query:**
+
+```sql
+SELECT 
+  provider,
+  model,
+  COUNT(*) as request_count,
+  SUM(prompt_tokens + completion_tokens) as total_tokens,
+  SUM(cost) as total_cost,
+  AVG(latency) as avg_latency
+FROM request_response_log
+WHERE organization_id = 'org-123'
+  AND created_at > NOW() - INTERVAL 7 DAY
+GROUP BY provider, model
+ORDER BY total_cost DESC;
+```
+
+---
+
+### MinIO (Object Storage)
+
+**MinIO** provides S3-compatible object storage for large request/response payloads.
+
+**Responsibilities:**
+- **Large Payloads**: Store request/response bodies exceeding size limits
+- **Binary Data**: Images, audio, documents passed to LLMs
+- **Exports**: Store exported datasets and request dumps
+- **Backups**: Long-term archival storage
+
+**Usage Pattern:**
+
+1. Small requests (< 100KB): Store directly in ClickHouse
+2. Large requests (> 100KB): Store in MinIO, reference in ClickHouse
+
+**Configuration:**
+
+MinIO is configured in `docker/docker-compose.yml` for local development.
+
+---
+
+## Shared Packages
+
+Helicone uses a monorepo structure with shared packages:
+
+### @helicone/cost
+
+**Location:** `packages/cost/`
+
+**Purpose:** Model registry and cost calculation for 300+ LLM models
+
+**Key Features:**
+- **Model Registry**: Comprehensive database of models, providers, pricing
+- **Cost Calculation**: Calculate request cost from token counts
+- **Provider Mappings**: Map provider URLs to cost models
+- **PTB/BYOK Support**: Different pricing for pass-through vs. BYOK
+
+**Architecture:**
+
+```
+models/
+├── authors/              # Models organized by author
+│   ├── anthropic/
+│   │   ├── claude-3.5-sonnet/
+│   │   │   ├── models.ts         # Base model config
+│   │   │   └── endpoints.ts      # PTB endpoints
+│   │   └── index.ts
+│   ├── openai/
+│   └── google/
+├── registry.ts           # Main registry API
+├── build-indexes.ts      # O(1) lookup indexes
+└── types.ts              # Type definitions
+```
+
+**Example Usage:**
+
+```typescript
+import { registry } from "@helicone/cost";
+
+// Get PTB endpoints for a model (sorted by cost)
+const endpoints = registry.getPtbEndpoints("gpt-4o-mini", "openai");
+
+// Get all providers for a model
+const providers = registry.getModelProviders("claude-3-5-sonnet");
+
+// Calculate cost
+import { costOfPrompt } from "@helicone/cost";
+const cost = costOfPrompt({
+  provider: "openai",
+  model: "gpt-4",
+  promptTokens: 1000,
+  completionTokens: 500,
+});
+```
+
+---
+
+### @helicone/llm-mapper
+
+**Location:** `packages/llm-mapper/`
+
+**Purpose:** Transform requests between OpenAI format and provider-specific formats
+
+**Supported Transformations:**
+- OpenAI ↔ Anthropic
+- OpenAI ↔ Google (Gemini)
+- OpenAI ↔ AWS Bedrock
+- OpenAI ↔ Azure OpenAI
+
+**Example:**
+
+```typescript
+import { toAnthropic } from "@helicone/llm-mapper";
+
+// OpenAI format
+const openaiRequest = {
+  model: "gpt-4",
+  messages: [
+    { role: "system", content: "You are helpful" },
+    { role: "user", content: "Hello!" }
+  ],
+  max_tokens: 100,
+};
+
+// Convert to Anthropic format
+const anthropicRequest = toAnthropic(openaiRequest);
+// {
+//   model: "claude-3-5-sonnet",
+//   system: "You are helpful",
+//   messages: [{ role: "user", content: "Hello!" }],
+//   max_tokens: 100
+// }
+```
+
+---
+
+### @helicone/prompts
+
+**Location:** `packages/prompts/`
+
+**Purpose:** Prompt template management and variable substitution
+
+---
+
+### SDKs
+
+**TypeScript SDKs:**
+
+1. **@helicone/helicone** (`sdk/typescript/async/`)
+   - Async logging with OpenLLMetry
+   - No proxy needed
+   - Auto-instruments OpenAI SDK
+
+2. **@helicone/helpers** (`sdk/typescript/helpers/`)
+   - Manual logging utilities
+   - `HeliconeManualLogger` for custom integrations
+   - Full control over request/response logging
+
+**Python SDKs:**
+- `helicone-python` (async logging)
+- Helper utilities for manual logging
+
+---
+
+## Data Flow
+
+### Request Logging Flow
+
+<Steps>
+  <Step title="Client Makes Request">
+    Application sends request to Helicone proxy (e.g., `https://oai.helicone.ai/v1`)
+  </Step>
+  
+  <Step title="Worker Processes Request">
+    1. Validate Helicone API key
+    2. Extract custom headers (Session-Id, Properties, etc.)
+    3. Forward request to provider (OpenAI, Anthropic, etc.)
+    4. Receive response from provider
+  </Step>
+  
+  <Step title="Worker Logs Data">
+    Asynchronously send request/response data to Jawn API:
+    - Request body, headers, timestamp
+    - Response body, status code
+    - Calculated cost and token counts
+    - Custom properties
+  </Step>
+  
+  <Step title="Jawn Stores Data">
+    1. Store in ClickHouse (analytics)
+    2. Store in Supabase (metadata)
+    3. Store large payloads in MinIO
+    4. Trigger webhooks if configured
+  </Step>
+  
+  <Step title="Web Displays Data">
+    User views request in dashboard:
+    - Query Jawn API for request details
+    - Display in request explorer
+    - Show analytics and charts
+  </Step>
+</Steps>
+
+### AI Gateway Flow
+
+<Steps>
+  <Step title="Parse Model String">
+    Client specifies model:
+    ```typescript
+    model: "gpt-4o,claude-sonnet-4,gemini-2.0-flash"
+    ```
+    
+    Worker parses into list of model attempts.
+  </Step>
+  
+  <Step title="Build Attempts">
+    AttemptBuilder creates ordered list:
+    1. Check for BYOK keys (priority 1)
+    2. Get PTB endpoints from registry (priority 2)
+    3. Sort by priority, then by cost
+  </Step>
+  
+  <Step title="Execute Attempts">
+    For each attempt:
+    1. Reserve escrow (PTB only)
+    2. Transform request to provider format
+    3. Add provider-specific authentication
+    4. Forward to provider
+    5. On failure: cancel escrow, try next attempt
+    6. On success: return response
+  </Step>
+  
+  <Step title="Return Response">
+    Return first successful response to client in OpenAI format.
+  </Step>
+</Steps>
+
+---
+
+## Development Workflow
+
+### Local Setup
+
+```bash
+# Clone repository
+git clone https://github.com/Helicone/helicone.git
+cd helicone
+
+# Start services (Docker)
+cd docker
+./helicone-compose.sh helicone up
+
+# Start web platform
+cp web/.env.example.better-auth web/.env.better-auth
+cd web && yarn && yarn dev:better-auth
+
+# Start Jawn API (in another terminal)
+cp valhalla/jawn/.env.example.better-auth valhalla/jawn/.env
+cd valhalla/jawn && yarn && yarn dev
+```
+
+### Testing
+
+```bash
+# Lint all code
+yarn lint
+
+# Run web tests
+cd web && yarn test
+
+# Run worker tests (Vitest)
+cd worker && yarn test
+
+# Run Jawn tests (Jest)
+cd valhalla/jawn && yarn test
+
+# Run Python integration tests
+python tests/python_integration_tests.py
+```
+
+### Building
+
+```bash
+# Build web platform
+yarn workspace helicone build
+
+# Build Jawn API
+yarn workspace helicone-api build
+
+# Build worker
+cd worker && yarn build
+```
+
+---
+
+## Deployment Architecture
+
+### Cloud Deployment (Production)
+
+**Helicone Cloud** runs on:
+
+- **Web**: Vercel (Next.js)
+- **Worker**: Cloudflare Workers (global edge network)
+- **Jawn**: AWS ECS (containerized)
+- **Supabase**: Managed Supabase instance
+- **ClickHouse**: ClickHouse Cloud
+- **MinIO**: AWS S3
+
+**Benefits:**
+- Global edge network for low latency
+- Auto-scaling for high traffic
+- Managed databases for reliability
+- SOC 2 compliance
+
+### Self-Hosted Deployment
+
+Helicone can be fully self-hosted using Docker or Kubernetes:
+
+**Docker Compose** (Recommended for testing):
+
+```bash
+git clone https://github.com/Helicone/helicone.git
+cd docker
+cp .env.example .env
+./helicone-compose.sh helicone up
+```
+
+**Kubernetes/Helm** (Production):
+
+Enterprise Helm charts available - contact [enterprise@helicone.ai](mailto:enterprise@helicone.ai)
+
+**Services in Self-Hosted:**
+- Web (Next.js)
+- Worker (Node.js runtime)
+- Jawn (Express API)
+- PostgreSQL (Supabase)
+- ClickHouse
+- MinIO
+- Redis (caching)
+
+---
+
+## Security & Compliance
+
+<CardGroup cols={2}>
+  <Card title="SOC 2 Type II" icon="shield-check">
+    Certified for security, availability, and confidentiality
+  </Card>
+  <Card title="GDPR Compliant" icon="scale-balanced">
+    Full compliance with European data protection regulations
+  </Card>
+  <Card title="Data Encryption" icon="lock">
+    TLS 1.3 in transit, AES-256 at rest
+  </Card>
+  <Card title="Access Controls" icon="user-lock">
+    Role-based access control (RBAC) for teams
+  </Card>
+</CardGroup>
+
+**API Key Security:**
+- API keys are hashed before storage
+- Support for key rotation
+- Fine-grained permissions
+
+**Provider Keys (BYOK):**
+- Encrypted at rest in Supabase
+- Never logged or exposed
+- Can be deleted at any time
+
+---
+
+## Monitoring & Observability
+
+Helicone uses multiple tools to monitor the platform itself:
+
+- **Datadog**: Application performance monitoring
+- **Sentry**: Error tracking and alerting
+- **ClickHouse**: Internal analytics on usage patterns
+- **Cloudflare Analytics**: Worker performance metrics
+- **Supabase Dashboard**: Database health and queries
+
+---
+
+## Performance Characteristics
+
+**Request Latency:**
+- Proxy overhead: ~20-50ms (global average)
+- Edge locations: Cloudflare's 300+ data centers
+- Async logging: Zero impact on response time
+
+**Throughput:**
+- Supports millions of requests per day
+- Auto-scaling based on traffic
+- Rate limiting to prevent abuse
+
+**Storage:**
+- ClickHouse: Billions of requests with fast queries
+- Compression: 10-100x for request data
+- Retention: Configurable (default: 90 days free tier)
+
+---
+
+## Extensibility
+
+Helicone is designed to be extended:
+
+**Add New Providers:**
+1. Add cost models in `packages/cost/`
+2. Add request transformers in `packages/llm-mapper/`
+3. Update worker routing logic
+
+**Custom Integrations:**
+- Webhooks for real-time events
+- REST API for data export
+- MCP server for programmatic access
+- PostHog integration for custom dashboards
+
+**Fine-Tuning Partnerships:**
+- OpenPipe
+- Autonomi
+- (More coming soon)
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Integrate Helicone into your application
+  </Card>
+  <Card title="AI Gateway" icon="gateway" href="/gateway/overview">
+    Learn about multi-provider routing
+  </Card>
+  <Card title="Self-Hosting" icon="server" href="/self-hosting/overview">
+    Deploy Helicone in your infrastructure
+  </Card>
+  <Card title="API Reference" icon="book" href="/api-reference/gateway/chat-completions">
+    Explore the REST API
+  </Card>
+</CardGroup>
+
+<Info>
+**Questions?** Join our [Discord](https://discord.gg/zsSTcH2qhG) or email [help@helicone.ai](mailto:help@helicone.ai)
+</Info>

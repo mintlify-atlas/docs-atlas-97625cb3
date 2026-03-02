@@ -1,0 +1,627 @@
+---
+title: "Rate Limiting"
+description: "Control request rates and costs with flexible rate limiting policies"
+icon: "gauge-high"
+---
+
+Helicone's AI Gateway provides powerful rate limiting to control usage by request count or cost, segmented by user, custom properties, or globally.
+
+## How Rate Limiting Works
+
+The gateway uses a token bucket algorithm:
+
+1. **Policy parsing** - Extracts limit, window, unit, and segment from policy string
+2. **Segment extraction** - Identifies the rate limit bucket (user, property, or global)
+3. **Token check** - Verifies sufficient tokens available
+4. **Token consumption** - Deducts tokens for the request
+5. **Response** - Allows or denies based on token availability
+
+```typescript
+// worker/src/lib/rate-limit/bucketClient.ts:124-295
+// The gateway checks rate limits before processing requests:
+export async function checkBucketRateLimit(params) {
+  const policyResult = parseRateLimitPolicy(params.policyHeader);
+  const segmentResult = extractSegmentIdentifier(policy.segment, propertySource);
+  const doKey = buildDurableObjectKey(organizationId, segment, policy.unit);
+  
+  const response = await doStub.consume({
+    capacity: policy.quota,
+    windowSeconds: policy.windowSeconds,
+    unit: policy.unit,
+    cost: cost.data!,
+  });
+  
+  return createSuccessResult(response, policy);
+}
+```
+
+## Quick Start
+
+Add rate limiting with a single header:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import OpenAI from "openai";
+
+    const client = new OpenAI({
+      baseURL: "https://ai-gateway.helicone.ai",
+      apiKey: process.env.HELICONE_API_KEY,
+      defaultHeaders: {
+        // Limit to 100 requests per 60 seconds
+        "Helicone-RateLimit-Policy": "100;w=60",
+      },
+    });
+
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: "Hello!" }],
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Python">
+    ```python
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url="https://ai-gateway.helicone.ai",
+        api_key="YOUR_HELICONE_API_KEY",
+        default_headers={
+            # Limit to 100 requests per 60 seconds
+            "Helicone-RateLimit-Policy": "100;w=60",
+        }
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": "Hello!"}],
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Policy Format
+
+Rate limit policies use this format:
+
+```
+<quota>;<param>=<value>;<param>=<value>;...
+```
+
+### Policy Parameters
+
+<ParamField path="quota" type="number" required>
+  Maximum number of requests or cents allowed in the time window
+  
+  ```typescript
+  "100;w=60"  // 100 requests per 60 seconds
+  "500;w=3600" // 500 requests per hour
+  ```
+</ParamField>
+
+<ParamField path="w" type="number" required>
+  Time window in seconds
+  
+  ```typescript
+  "w=60"    // 60 seconds (1 minute)
+  "w=3600"  // 3600 seconds (1 hour) 
+  "w=86400" // 86400 seconds (24 hours)
+  ```
+</ParamField>
+
+<ParamField path="u" type="string" default="request">
+  Unit to rate limit: `request` or `cents`
+  
+  ```typescript
+  "u=request" // Count by number of requests (default)
+  "u=cents"   // Count by cost in cents
+  ```
+</ParamField>
+
+<ParamField path="s" type="string" default="global">
+  Segment type: `global`, `user`, or a custom property name
+  
+  ```typescript
+  "s=global"    // Rate limit across all requests
+  "s=user"      // Rate limit per user (from Helicone-User-Id header)
+  "s=customer"  // Rate limit per customer (from Helicone-Property-Customer header)
+  ```
+</ParamField>
+
+## Rate Limiting by Requests
+
+Limit the number of requests:
+
+### Global Rate Limiting
+
+Limit all requests regardless of user:
+
+```typescript
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+  defaultHeaders: {
+    // 1000 requests per hour globally
+    "Helicone-RateLimit-Policy": "1000;w=3600;s=global",
+  },
+});
+```
+
+### Per-User Rate Limiting
+
+Limit requests per user:
+
+```typescript
+const getUserResponse = async (userId: string, message: string) => {
+  return await client.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: message }],
+    },
+    {
+      headers: {
+        // 10 requests per minute per user
+        "Helicone-RateLimit-Policy": "10;w=60;s=user",
+        "Helicone-User-Id": userId,
+      },
+    }
+  );
+};
+```
+
+<Note>
+The `Helicone-User-Id` header is required when using `s=user`.
+</Note>
+
+### Per-Property Rate Limiting
+
+Limit by custom properties:
+
+```typescript
+const getCustomerResponse = async (customerId: string, message: string) => {
+  return await client.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: message }],
+    },
+    {
+      headers: {
+        // 100 requests per hour per customer
+        "Helicone-RateLimit-Policy": "100;w=3600;s=customer",
+        "Helicone-Property-Customer": customerId,
+      },
+    }
+  );
+};
+```
+
+You can use any custom property:
+
+<CodeGroup>
+```typescript By Team
+"Helicone-RateLimit-Policy": "500;w=3600;s=team",
+"Helicone-Property-Team": "engineering"
+```
+
+```typescript By Tenant
+"Helicone-RateLimit-Policy": "1000;w=86400;s=tenant",
+"Helicone-Property-Tenant": "acme-corp"
+```
+
+```typescript By Environment
+"Helicone-RateLimit-Policy": "100;w=60;s=environment",
+"Helicone-Property-Environment": "production"
+```
+</CodeGroup>
+
+## Rate Limiting by Cost
+
+Limit spending in cents:
+
+```typescript
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+  defaultHeaders: {
+    // $10 per day per user (1000 cents)
+    "Helicone-RateLimit-Policy": "1000;w=86400;u=cents;s=user",
+  },
+});
+
+const getUserResponse = async (userId: string, message: string) => {
+  return await client.chat.completions.create(
+    {
+      model: "gpt-4o",
+      messages: [{ role: "user", content: message }],
+    },
+    {
+      headers: {
+        "Helicone-User-Id": userId,
+      },
+    }
+  );
+};
+```
+
+How cost-based rate limiting works:
+
+1. **Pre-request check** - Verifies budget exists (checks if remaining > 0)
+2. **Request proceeds** - Allows request if budget available
+3. **Post-request recording** - Deducts actual cost after response
+
+<Info>
+Cost is calculated automatically from provider responses. No need to specify cost explicitly.
+</Info>
+
+### Cost Examples
+
+<CodeGroup>
+```typescript Daily Spend Limit
+// $50 per day globally (5000 cents)
+"Helicone-RateLimit-Policy": "5000;w=86400;u=cents;s=global"
+```
+
+```typescript Per-User Budget
+// $5 per hour per user (500 cents)
+"Helicone-RateLimit-Policy": "500;w=3600;u=cents;s=user"
+```
+
+```typescript Customer Tier Limits
+// Free tier: $1 per day (100 cents)
+"Helicone-RateLimit-Policy": "100;w=86400;u=cents;s=customer",
+"Helicone-Property-Customer": "free-tier-user-123"
+
+// Pro tier: $100 per day (10000 cents)
+"Helicone-RateLimit-Policy": "10000;w=86400;u=cents;s=customer",
+"Helicone-Property-Customer": "pro-tier-user-456"
+```
+</CodeGroup>
+
+## Rate Limit Headers
+
+Rate limit status is returned in response headers:
+
+```typescript
+const response = await fetch("https://ai-gateway.helicone.ai/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${HELICONE_API_KEY}`,
+    "Helicone-RateLimit-Policy": "10;w=60",
+  },
+  body: JSON.stringify({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Hello!" }],
+  }),
+});
+
+// Check rate limit headers
+console.log("Limit:", response.headers.get("Helicone-RateLimit-Limit"));
+console.log("Remaining:", response.headers.get("Helicone-RateLimit-Remaining"));
+console.log("Reset:", response.headers.get("Helicone-RateLimit-Reset"));
+console.log("Policy:", response.headers.get("Helicone-RateLimit-Policy"));
+```
+
+### Response Headers
+
+<ResponseField name="Helicone-RateLimit-Limit" type="string">
+  Total quota for the time window
+  ```
+  100
+  ```
+</ResponseField>
+
+<ResponseField name="Helicone-RateLimit-Remaining" type="string">
+  Remaining quota in the current window
+  ```
+  87
+  ```
+</ResponseField>
+
+<ResponseField name="Helicone-RateLimit-Reset" type="string">
+  Seconds until the rate limit resets
+  ```
+  45
+  ```
+</ResponseField>
+
+<ResponseField name="Helicone-RateLimit-Policy" type="string">
+  The active rate limit policy
+  ```
+  100;w=60;u=request;s=user
+  ```
+</ResponseField>
+
+## Handling Rate Limits
+
+Detect and handle rate limit errors:
+
+```typescript
+try {
+  const response = await client.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: "Hello!" }],
+    },
+    {
+      headers: {
+        "Helicone-RateLimit-Policy": "10;w=60;s=user",
+        "Helicone-User-Id": userId,
+      },
+    }
+  );
+} catch (error) {
+  if (error.status === 429) {
+    // Rate limited
+    const resetTime = error.headers?.get("Helicone-RateLimit-Reset");
+    console.error(`Rate limited. Retry in ${resetTime} seconds`);
+    
+    // Implement retry logic
+    await new Promise(resolve => setTimeout(resolve, resetTime * 1000));
+    // Retry request...
+  }
+}
+```
+
+## Time Window Examples
+
+<CodeGroup>
+```typescript Per Minute
+"Helicone-RateLimit-Policy": "10;w=60"
+```
+
+```typescript Per Hour
+"Helicone-RateLimit-Policy": "100;w=3600"
+```
+
+```typescript Per Day
+"Helicone-RateLimit-Policy": "1000;w=86400"
+```
+
+```typescript Per Week
+"Helicone-RateLimit-Policy": "5000;w=604800"
+```
+
+```typescript Custom (15 minutes)
+"Helicone-RateLimit-Policy": "50;w=900"
+```
+</CodeGroup>
+
+## Multi-Tier Rate Limiting
+
+Implement different limits for different user tiers:
+
+```typescript
+const getRateLimitPolicy = (userTier: string): string => {
+  switch (userTier) {
+    case "free":
+      return "10;w=3600;s=user"; // 10 requests/hour
+    case "pro":
+      return "100;w=3600;s=user"; // 100 requests/hour
+    case "enterprise":
+      return "1000;w=3600;s=user"; // 1000 requests/hour
+    default:
+      return "5;w=3600;s=user"; // Default: 5 requests/hour
+  }
+};
+
+const getUserResponse = async (
+  userId: string,
+  userTier: string,
+  message: string
+) => {
+  return await client.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: message }],
+    },
+    {
+      headers: {
+        "Helicone-RateLimit-Policy": getRateLimitPolicy(userTier),
+        "Helicone-User-Id": userId,
+      },
+    }
+  );
+};
+```
+
+## Combining Rate Limits
+
+Apply multiple rate limits:
+
+```typescript
+// You can only set one policy per request, but you can combine limits
+// by making separate validations:
+
+// Option 1: Use the most restrictive limit
+const policy = "10;w=60;s=user"; // 10 per minute per user
+
+// Option 2: Chain requests with different limits
+// Global hourly limit
+const globalResponse = await client.chat.completions.create(
+  { /* ... */ },
+  { headers: { "Helicone-RateLimit-Policy": "1000;w=3600;s=global" } }
+);
+
+// Then per-user limit
+const userResponse = await client.chat.completions.create(
+  { /* ... */ },
+  { headers: { "Helicone-RateLimit-Policy": "10;w=60;s=user" } }
+);
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Set Appropriate Limits" icon="sliders">
+    Match rate limits to your use case:
+    
+    ```typescript
+    // Interactive apps: short windows
+    "10;w=60;s=user" // 10 per minute
+    
+    // Batch processing: longer windows
+    "1000;w=3600;s=global" // 1000 per hour
+    
+    // Cost control: daily budgets
+    "500;w=86400;u=cents;s=user" // $5 per day per user
+    ```
+  </Accordion>
+  
+  <Accordion title="Use Cost Limits for Expensive Models" icon="dollar-sign">
+    Prevent runaway costs:
+    
+    ```typescript
+    // Limit spending on expensive models
+    "Helicone-RateLimit-Policy": "1000;w=86400;u=cents;s=user" // $10/day
+    ```
+  </Accordion>
+  
+  <Accordion title="Segment by User or Customer" icon="users">
+    Fair usage across users:
+    
+    ```typescript
+    // Per-user limits prevent one user from consuming all quota
+    "s=user"
+    
+    // Per-customer limits for B2B SaaS
+    "s=customer"
+    ```
+  </Accordion>
+  
+  <Accordion title="Monitor Rate Limit Metrics" icon="chart-line">
+    Track rate limit hits in Helicone dashboard:
+    
+    - High rate limit hits → increase quota or optimize usage
+    - Zero hits → quota may be too high
+    - Specific users hitting limits → investigate abuse or legitimate high usage
+  </Accordion>
+  
+  <Accordion title="Implement Retry Logic" icon="rotate">
+    Handle rate limits gracefully:
+    
+    ```typescript
+    const makeRequestWithRetry = async (maxRetries = 3) => {
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          return await client.chat.completions.create(...);
+        } catch (error) {
+          if (error.status === 429 && i < maxRetries - 1) {
+            const resetTime = error.headers?.get("Helicone-RateLimit-Reset");
+            await new Promise(r => setTimeout(r, resetTime * 1000));
+            continue;
+          }
+          throw error;
+        }
+      }
+    };
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Error Responses
+
+When rate limited, you'll receive a 429 response:
+
+```json
+{
+  "error": {
+    "message": "Rate limited",
+    "type": "rate_limited",
+    "code": "rate_limited"
+  }
+}
+```
+
+With headers:
+```
+Helicone-RateLimit-Limit: 100
+Helicone-RateLimit-Remaining: 0
+Helicone-RateLimit-Reset: 42
+Helicone-RateLimit-Policy: 100;w=60;u=request;s=user
+```
+
+## Advanced Configuration
+
+### Failure Modes
+
+Rate limiting is configured to "fail-open" by default, meaning if the rate limiter is unavailable, requests are allowed. This prioritizes availability over strict enforcement.
+
+### Token Bucket Algorithm
+
+The rate limiter uses a token bucket algorithm:
+
+1. Bucket starts with full quota
+2. Each request consumes tokens
+3. Tokens regenerate over the time window
+4. Requests blocked when bucket empty
+
+```typescript
+// worker/src/lib/rate-limit/bucketClient.ts
+// Token consumption:
+const response = await doStub.consume({
+  capacity: policy.quota,        // Bucket size
+  windowSeconds: policy.windowSeconds, // Refill period
+  unit: policy.unit,            // What to count
+  cost: cost.data!,             // Tokens to consume
+});
+```
+
+## Combining with Other Features
+
+### Rate Limiting + Caching
+
+```typescript
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+  defaultHeaders: {
+    // Limit requests
+    "Helicone-RateLimit-Policy": "100;w=3600;s=user",
+    // Cache to reduce rate limit consumption
+    "Helicone-Cache-Enabled": "true",
+  },
+});
+```
+
+Cached responses don't consume rate limit quota.
+
+### Rate Limiting + Fallbacks
+
+```typescript
+const response = await client.chat.completions.create(
+  {
+    // Fallback to other providers if rate limited
+    model: "gpt-4o,claude-sonnet-4,gemini-2.0-flash",
+    messages: [{ role: "user", content: "Hello!" }],
+  },
+  {
+    headers: {
+      "Helicone-RateLimit-Policy": "10;w=60;s=user",
+      "Helicone-User-Id": userId,
+    },
+  }
+);
+```
+
+<Warning>
+Helicone rate limits cause immediate failure without fallback to other models. This prevents unexpected costs from automatic fallbacks.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Request Caching" icon="database" href="/gateway/caching">
+    Reduce rate limit consumption with caching
+  </Card>
+  <Card title="Intelligent Routing" icon="route" href="/gateway/routing">
+    Route across providers for load distribution
+  </Card>
+  <Card title="Automatic Fallbacks" icon="shield-halved" href="/gateway/fallbacks">
+    Configure fallback chains
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/gateway/quickstart">
+    Get started with the AI Gateway
+  </Card>
+</CardGroup>

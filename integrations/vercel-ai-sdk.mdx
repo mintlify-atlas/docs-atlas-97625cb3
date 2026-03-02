@@ -1,0 +1,380 @@
+---
+title: "Vercel AI SDK Integration"
+sidebarTitle: "Vercel AI SDK"
+description: "Integrate Helicone with Vercel AI SDK for streaming, agents, and multi-provider support"
+icon: "sparkles"
+---
+
+## Introduction
+
+Helicone integrates seamlessly with the Vercel AI SDK, providing comprehensive observability for your AI-powered applications. Track streaming responses, agent executions, tool calls, and more across 100+ AI models.
+
+<Note>
+  The Helicone provider for Vercel AI SDK is available as a dedicated package: `@helicone/ai-sdk-provider`.
+</Note>
+
+## Quick Start
+
+Integrate Helicone with Vercel AI SDK using our dedicated provider package.
+
+<Steps>
+  <Step title="Install dependencies">
+    <CodeGroup>
+      ```bash npm
+      npm install @helicone/ai-sdk-provider ai
+      ```
+
+      ```bash pnpm
+      pnpm add @helicone/ai-sdk-provider ai
+      ```
+
+      ```bash yarn
+      yarn add @helicone/ai-sdk-provider ai
+      ```
+
+      ```bash bun
+      bun add @helicone/ai-sdk-provider ai
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Set environment variables">
+    ```bash
+    HELICONE_API_KEY=sk-helicone-...
+    ```
+
+    <Note>
+      Configure your provider API keys (OpenAI, Anthropic, etc.) at [Helicone Providers](https://us.helicone.ai/providers) for BYOK (Bring Your Own Keys).
+    </Note>
+  </Step>
+
+  <Step title="Use the Helicone provider">
+    ```typescript
+    import { createHelicone } from '@helicone/ai-sdk-provider';
+    import { generateText } from 'ai';
+
+    const helicone = createHelicone({
+      apiKey: process.env.HELICONE_API_KEY,
+    });
+
+    const result = await generateText({
+      model: helicone('gpt-4o-mini'),
+      prompt: 'What is the meaning of life?',
+    });
+
+    console.log(result.text);
+    ```
+  </Step>
+</Steps>
+
+## Basic Examples
+
+### Text Generation
+
+```typescript
+import { createHelicone } from '@helicone/ai-sdk-provider';
+import { generateText } from 'ai';
+
+const helicone = createHelicone({
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+const { text } = await generateText({
+  model: helicone('claude-3-5-sonnet-20241022'),
+  prompt: 'Write a haiku about artificial intelligence',
+});
+
+console.log(text);
+```
+
+### Streaming Responses
+
+```typescript
+import { createHelicone } from '@helicone/ai-sdk-provider';
+import { streamText } from 'ai';
+
+const helicone = createHelicone({
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+const result = await streamText({
+  model: helicone('gpt-4o'),
+  prompt: 'Tell me a story about a robot',
+  maxTokens: 500,
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Multi-Provider Support
+
+Switch between providers or use automatic routing:
+
+```typescript
+import { createHelicone } from '@helicone/ai-sdk-provider';
+import { generateText } from 'ai';
+
+const helicone = createHelicone({
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+// Automatic routing (cheapest provider)
+const auto = await generateText({
+  model: helicone('gpt-4o'),
+  prompt: 'Hello!',
+});
+
+// Specific provider
+const anthropic = await generateText({
+  model: helicone('claude-3-5-sonnet-20241022/anthropic'),
+  prompt: 'Hello!',
+});
+
+// Automatic fallback: try Anthropic first, fall back to OpenAI
+const fallback = await generateText({
+  model: helicone('claude-3-5-sonnet-20241022/anthropic,gpt-4o/openai'),
+  prompt: 'Hello!',
+});
+```
+
+## Advanced Features
+
+### Custom Properties and Session Tracking
+
+Add metadata to track and filter requests:
+
+```typescript
+import { createHelicone } from '@helicone/ai-sdk-provider';
+import { generateText } from 'ai';
+
+const helicone = createHelicone({
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+const result = await generateText({
+  model: helicone('gpt-4o', {
+    extraBody: {
+      helicone: {
+        sessionId: 'conversation-abc123',
+        userId: 'user-123',
+        properties: {
+          environment: 'production',
+          feature: 'customer-support',
+          version: '2.1.0',
+        },
+      },
+    },
+  }),
+  prompt: 'How can I help you today?',
+});
+```
+
+### Tool Calling
+
+Track function calling and tool usage:
+
+```typescript
+import { createHelicone } from '@helicone/ai-sdk-provider';
+import { generateText, tool } from 'ai';
+import { z } from 'zod';
+
+const helicone = createHelicone({
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+const result = await generateText({
+  model: helicone('gpt-4o'),
+  prompt: 'What is the weather in San Francisco?',
+  tools: {
+    getWeather: tool({
+      description: 'Get weather for a location',
+      parameters: z.object({
+        location: z.string().describe('The city name'),
+        unit: z.enum(['celsius', 'fahrenheit']).optional(),
+      }),
+      execute: async ({ location, unit = 'fahrenheit' }) => {
+        // Call weather API
+        return `It's sunny in ${location}, 72°${unit === 'celsius' ? 'C' : 'F'}`;
+      },
+    }),
+  },
+});
+
+console.log(result.text);
+```
+
+### Agents
+
+Build multi-step reasoning agents with full observability:
+
+```typescript
+import { createHelicone } from '@helicone/ai-sdk-provider';
+import { 
+  Experimental_Agent as Agent, 
+  tool, 
+  jsonSchema, 
+  stepCountIs 
+} from 'ai';
+
+const helicone = createHelicone({
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+const weatherAgent = new Agent({
+  model: helicone('gpt-4o'),
+  stopWhen: stepCountIs(5),
+  tools: {
+    getWeather: tool({
+      description: 'Get the current weather for a location',
+      inputSchema: jsonSchema({
+        type: 'object',
+        properties: {
+          location: {
+            type: 'string',
+            description: 'The city and state, e.g. San Francisco, CA',
+          },
+        },
+        required: ['location'],
+      }),
+      execute: async ({ location }) => {
+        // Simulate weather API
+        return {
+          location,
+          temperature: 72,
+          conditions: 'sunny',
+        };
+      },
+    }),
+  },
+});
+
+const result = await weatherAgent.generate({
+  prompt: 'What is the weather like in San Francisco and New York?',
+});
+
+console.log(result.text);
+console.log(`Steps taken: ${result.steps?.length || 0}`);
+```
+
+### Helicone Prompts Integration
+
+Use prompts from your Helicone dashboard:
+
+```typescript
+import { createHelicone } from '@helicone/ai-sdk-provider';
+import type { WithHeliconePrompt } from '@helicone/ai-sdk-provider';
+import { generateText } from 'ai';
+
+const helicone = createHelicone({
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+const result = await generateText({
+  model: helicone('gpt-4o', {
+    promptId: 'prompt-abc123',
+    inputs: {
+      customer_name: 'Sarah Johnson',
+      issue_type: 'billing',
+    },
+    environment: 'production',
+    extraBody: {
+      helicone: {
+        sessionId: 'support-session-123',
+        properties: {
+          department: 'customer-support',
+        },
+      },
+    },
+  }),
+  messages: [{ role: 'user', content: 'placeholder' }],
+} as WithHeliconePrompt);
+
+console.log(result.text);
+```
+
+<Note>
+  When using `promptId`, the placeholder messages are required for SDK validation but will be replaced by the prompt from your Helicone dashboard.
+</Note>
+
+### Benefits of Helicone Prompts:
+
+- **Centralized Management** - Update prompts without code changes
+- **Non-technical friendly** - Manage prompts via dashboard
+- **Lower Latency** - Single API call, no message construction
+- **A/B Testing** - Test different prompt versions
+- **Analytics** - Track prompt performance
+
+## Using with Legacy Proxy Method
+
+You can also use Vercel AI SDK with Helicone's legacy proxy endpoints:
+
+```typescript
+import { createOpenAI } from '@ai-sdk/openai';
+import { streamText } from 'ai';
+
+const openai = createOpenAI({
+  baseURL: 'https://oai.helicone.ai/v1',
+  headers: {
+    'Helicone-Auth': `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+const response = await streamText({
+  model: openai('gpt-4o'),
+  prompt: 'Hello world',
+  headers: {
+    'Helicone-Session-Id': 'session-123',
+    'Helicone-User-Id': 'user-123',
+  },
+});
+```
+
+## Supported Models
+
+The Helicone provider supports 100+ models across providers:
+
+- **OpenAI**: gpt-4o, gpt-4-turbo, gpt-3.5-turbo
+- **Anthropic**: claude-3-5-sonnet, claude-3-opus, claude-3-haiku
+- **Google**: gemini-2.0-flash, gemini-pro
+- **Meta**: llama-3.3-70b, llama-3.1-405b
+- **And many more**: View all at [helicone.ai/models](https://helicone.ai/models)
+
+## Monitoring and Analytics
+
+Once integrated, view your Vercel AI SDK usage in the Helicone dashboard:
+
+- **Request logs** - Full request/response data including streaming
+- **Cost tracking** - Monitor spending across all providers
+- **Latency metrics** - Track response times and time-to-first-token
+- **Agent traces** - Visualize agent steps and tool calls
+- **Session analytics** - Track conversation patterns
+- **User metrics** - Per-user usage and costs
+
+<Card title="View Dashboard" icon="chart-line" href="https://us.helicone.ai/dashboard">
+  Monitor your Vercel AI SDK usage in real-time
+</Card>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="AI Gateway" icon="arrow-progress" href="/gateway/overview">
+    Learn about unified API access to 100+ models
+  </Card>
+  <Card title="Provider Routing" icon="route" href="/gateway/routing">
+    Configure intelligent routing and fallbacks
+  </Card>
+  <Card title="Custom Properties" icon="tags" href="/observability/custom-properties">
+    Add metadata to your requests
+  </Card>
+  <Card title="Sessions" icon="link" href="/observability/sessions">
+    Track multi-turn conversations
+  </Card>
+  <Card title="Helicone Prompts" icon="code" href="/prompts/overview">
+    Manage prompts centrally
+  </Card>
+  <Card title="GitHub Examples" icon="github" href="https://github.com/Helicone/ai-sdk-provider/tree/main/examples">
+    View comprehensive code examples
+  </Card>
+</CardGroup>

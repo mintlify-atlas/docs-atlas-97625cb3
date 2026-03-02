@@ -1,0 +1,767 @@
+---
+title: "Sessions"
+sidebarTitle: "Sessions"
+description: "Track multi-turn conversations and complex AI agent workflows with hierarchical session visualization"
+"twitter:title": "Sessions - Helicone OSS LLM Observability"
+---
+
+import QuestionsSection from "/snippets/questions-section.mdx";
+
+## Overview
+
+Sessions group related requests together to represent complete workflows or conversations. When building AI agents or chatbots, your application often makes multiple LLM calls, vector database queries, and tool calls to complete a single task. Sessions let you trace the entire flow from initial user input to final response in one unified view.
+
+<Frame caption="Session view showing a complete AI agent workflow with hierarchical traces">
+  <img
+    src="/images/sessions/helicone-session-ui.webp"
+    alt="Session view in Helicone dashboard"
+  />
+</Frame>
+
+## Why Use Sessions
+
+<CardGroup cols={2}>
+<Card title="Debug AI Agents" icon="bug">
+See the entire agent workflow in one view, from initial request to final response with all intermediate steps
+</Card>
+
+<Card title="Track Conversations" icon="comments">
+Reconstruct complete chatbot interactions across multiple turns and context switches
+</Card>
+
+<Card title="Analyze Performance" icon="chart-line">
+Measure outcomes across entire interaction sequences, not just individual requests
+</Card>
+
+<Card title="Visualize Workflows" icon="diagram-project">
+Understand complex multi-step processes with hierarchical trace visualization
+</Card>
+</CardGroup>
+
+## Quick Start
+
+<Steps>
+<Step title="Add Session Headers">
+Include three required headers in your LLM requests:
+
+```typescript
+{
+  "Helicone-Session-Id": "unique-session-id",
+  "Helicone-Session-Path": "/trace-path", 
+  "Helicone-Session-Name": "Session Name"
+}
+```
+</Step>
+
+<Step title="Structure Your Paths">
+Use path syntax to represent parent-child relationships:
+
+```typescript
+"/abstract"                    // Top-level trace
+"/abstract/outline"           // Child trace
+"/abstract/outline/lesson-1"  // Grandchild trace
+```
+</Step>
+
+<Step title="Make Your Requests">
+Execute your LLM requests with session headers:
+
+<CodeGroup>
+```typescript Node.js
+import { randomUUID } from "crypto";
+import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+const sessionId = randomUUID();
+
+const response = await client.chat.completions.create(
+  { 
+    messages: [{ role: "user", content: "Hello" }], 
+    model: "gpt-4o-mini" 
+  },
+  {
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Session-Path": "/greeting",
+      "Helicone-Session-Name": "User Conversation"
+    }
+  }
+);
+```
+
+```python Python
+import uuid
+from openai import OpenAI
+import os
+
+client = OpenAI(
+    api_key=os.environ.get("OPENAI_API_KEY"),
+    base_url="https://oai.helicone.ai/v1",
+    default_headers={
+        "Helicone-Auth": f"Bearer {os.environ.get('HELICONE_API_KEY')}",
+    },
+)
+
+session_id = str(uuid.uuid4())
+
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Hello"}],
+    extra_headers={
+        "Helicone-Session-Id": session_id,
+        "Helicone-Session-Path": "/greeting",
+        "Helicone-Session-Name": "User Conversation",
+    },
+)
+```
+</CodeGroup>
+</Step>
+</Steps>
+
+## Core Concepts
+
+### Session ID
+
+A unique identifier that groups all related requests together. Think of it as a conversation thread ID.
+
+**What to use:**
+- **UUIDs** (recommended): `550e8400-e29b-41d4-a716-446655440000`
+- **Unique strings**: `user_123_conversation_456`
+
+**Why it matters:**
+- Same ID = requests grouped together in dashboard
+- Different IDs = separate sessions
+- Reusing IDs across different workflows will mix unrelated requests
+
+```typescript
+// Good - unique per conversation
+const sessionId = randomUUID();
+
+// Bad - reuses same ID
+const sessionId = "chat_session"; // All users get mixed together
+```
+
+### Session Path
+
+Paths create hierarchy within your session, showing how requests relate to each other.
+
+**Path Structure Rules:**
+- Start with `/` (forward slash)
+- Use `/` to separate levels: `/parent/child/grandchild`
+- Keep names descriptive: `/analyze_request/fetch_data/process_results`
+- **Group by function, not by time** - same conceptual work = same path
+
+**How Hierarchy Works:**
+```typescript
+"/conversation"                    // Root level
+"/conversation/initial_question"   // Child of conversation  
+"/conversation/followup"          // Another child of conversation
+"/conversation/followup/clarify"  // Child of followup
+```
+
+**Path Design Patterns:**
+
+<Tabs>
+<Tab title="Workflow Pattern">
+Good for AI agents with distinct phases:
+
+```typescript
+"/task"
+"/task/research" 
+"/task/research/web_search"
+"/task/research/summarize"
+"/task/generate"
+"/task/generate/outline"
+"/task/generate/content"
+```
+</Tab>
+
+<Tab title="Conversation Pattern">
+Good for chatbots with back-and-forth exchanges:
+
+```typescript
+"/session"
+"/session/turn_1/question"
+"/session/turn_1/answer" 
+"/session/turn_2/question"
+"/session/turn_2/answer"
+```
+</Tab>
+
+<Tab title="Pipeline Pattern">
+Good for data processing workflows:
+
+```typescript
+"/process"
+"/process/extract"
+"/process/extract/parse"
+"/process/transform"
+"/process/transform/clean"
+"/process/load"
+```
+</Tab>
+</Tabs>
+
+### Session Name
+
+A high-level grouping that makes it easy to filter and organize similar sessions in the dashboard.
+
+**Good session names:**
+- `"Customer Support"` - All support sessions use this name
+- `"Content Generation"` - All content creation sessions
+- `"Code Review Agent"` - All code review workflows
+
+**Purpose:**
+- **Quick filtering** - Filter dashboard to show only specific session types
+- **High-level organization** - Group alike sessions for comparison
+- **Performance analysis** - Compare metrics across the same session type
+
+## Configuration Reference
+
+### Required Headers
+
+<ParamField header="Helicone-Session-Id" type="string" required>
+  Unique identifier for the session. Use UUIDs to avoid conflicts.
+  
+  Example: `"550e8400-e29b-41d4-a716-446655440000"`
+</ParamField>
+
+<ParamField header="Helicone-Session-Path" type="string" required>
+  Path representing the trace hierarchy using `/` syntax. Shows parent-child relationships.
+  
+  Example: `"/abstract"` or `"/parent/child"`
+</ParamField>
+
+<ParamField header="Helicone-Session-Name" type="string" required>
+  Human-readable name for the session type. Groups similar workflows together.
+  
+  Example: `"Course Plan"` or `"Customer Support"`
+</ParamField>
+
+## Session Patterns
+
+<Tabs>
+<Tab title="Multi-Turn Chatbot">
+Track a complete conversation with context:
+
+```typescript
+import { randomUUID } from "crypto";
+import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+const sessionId = randomUUID();
+
+// Turn 1
+const response1 = await client.chat.completions.create(
+  {
+    messages: [{ role: "user", content: "What is machine learning?" }],
+    model: "gpt-4o-mini",
+  },
+  {
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Session-Path": "/turn_1",
+      "Helicone-Session-Name": "Educational Chat",
+    },
+  }
+);
+
+// Turn 2 - with context
+const response2 = await client.chat.completions.create(
+  {
+    messages: [
+      { role: "user", content: "What is machine learning?" },
+      { role: "assistant", content: response1.choices[0].message.content },
+      { role: "user", content: "Can you give me an example?" },
+    ],
+    model: "gpt-4o-mini",
+  },
+  {
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Session-Path": "/turn_2",
+      "Helicone-Session-Name": "Educational Chat",
+    },
+  }
+);
+
+// Turn 3 - deeper question
+const response3 = await client.chat.completions.create(
+  {
+    messages: [
+      { role: "user", content: "What is machine learning?" },
+      { role: "assistant", content: response1.choices[0].message.content },
+      { role: "user", content: "Can you give me an example?" },
+      { role: "assistant", content: response2.choices[0].message.content },
+      { role: "user", content: "How does supervised learning differ from unsupervised?" },
+    ],
+    model: "gpt-4o-mini",
+  },
+  {
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Session-Path": "/turn_3",
+      "Helicone-Session-Name": "Educational Chat",
+    },
+  }
+);
+```
+</Tab>
+
+<Tab title="AI Agent Workflow">
+Track a complex research and writing agent:
+
+```typescript
+import { randomUUID } from "crypto";
+import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+const sessionId = randomUUID();
+
+// Step 1: Understand the request
+const understanding = await client.chat.completions.create(
+  {
+    messages: [{ role: "user", content: "Write a blog post about renewable energy" }],
+    model: "gpt-4o-mini",
+  },
+  {
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Session-Path": "/understand",
+      "Helicone-Session-Name": "Content Generation Agent",
+    },
+  }
+);
+
+// Step 2: Research phase
+const research = await client.chat.completions.create(
+  {
+    messages: [{ role: "user", content: "Research key facts about renewable energy" }],
+    model: "gpt-4o-mini",
+  },
+  {
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Session-Path": "/understand/research",
+      "Helicone-Session-Name": "Content Generation Agent",
+    },
+  }
+);
+
+// Step 3: Create outline
+const outline = await client.chat.completions.create(
+  {
+    messages: [{ role: "user", content: "Create a blog post outline" }],
+    model: "gpt-4o-mini",
+  },
+  {
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Session-Path": "/understand/research/outline",
+      "Helicone-Session-Name": "Content Generation Agent",
+    },
+  }
+);
+
+// Step 4: Write introduction
+const intro = await client.chat.completions.create(
+  {
+    messages: [{ role: "user", content: "Write the introduction section" }],
+    model: "gpt-4o-mini",
+  },
+  {
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Session-Path": "/write/introduction",
+      "Helicone-Session-Name": "Content Generation Agent",
+    },
+  }
+);
+
+// Step 5: Write main content
+const content = await client.chat.completions.create(
+  {
+    messages: [{ role: "user", content: "Write the main content sections" }],
+    model: "gpt-4o-mini",
+  },
+  {
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Session-Path": "/write/content",
+      "Helicone-Session-Name": "Content Generation Agent",
+    },
+  }
+);
+
+// Step 6: Write conclusion
+const conclusion = await client.chat.completions.create(
+  {
+    messages: [{ role: "user", content: "Write the conclusion" }],
+    model: "gpt-4o-mini",
+  },
+  {
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Session-Path": "/write/conclusion",
+      "Helicone-Session-Name": "Content Generation Agent",
+    },
+  }
+);
+```
+</Tab>
+
+<Tab title="RAG Pipeline">
+Track a complete RAG (Retrieval-Augmented Generation) workflow:
+
+```typescript
+import { randomUUID } from "crypto";
+import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+const sessionId = randomUUID();
+const userQuestion = "What are the benefits of TypeScript?";
+
+// Step 1: Generate embedding for the question
+const embedding = await client.embeddings.create(
+  {
+    model: "text-embedding-3-small",
+    input: userQuestion,
+  },
+  {
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Session-Path": "/embed",
+      "Helicone-Session-Name": "RAG Q&A",
+    },
+  }
+);
+
+// Step 2: Vector search (logged via Helicone Logger SDK)
+// Note: This would use the Logger SDK for vector DB tracking
+const searchResults = await vectorDb.search(embedding.data[0].embedding);
+
+// Step 3: Rerank results
+const reranking = await client.chat.completions.create(
+  {
+    messages: [
+      { 
+        role: "user", 
+        content: `Rerank these results for relevance: ${JSON.stringify(searchResults)}` 
+      }
+    ],
+    model: "gpt-4o-mini",
+  },
+  {
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Session-Path": "/embed/rerank",
+      "Helicone-Session-Name": "RAG Q&A",
+    },
+  }
+);
+
+// Step 4: Generate answer with context
+const answer = await client.chat.completions.create(
+  {
+    messages: [
+      { 
+        role: "system", 
+        content: "Answer based on the provided context." 
+      },
+      { 
+        role: "user", 
+        content: `Context: ${searchResults}\n\nQuestion: ${userQuestion}` 
+      }
+    ],
+    model: "gpt-4o-mini",
+  },
+  {
+    headers: {
+      "Helicone-Session-Id": sessionId,
+      "Helicone-Session-Path": "/generate",
+      "Helicone-Session-Name": "RAG Q&A",
+    },
+  }
+);
+```
+</Tab>
+</Tabs>
+
+## Querying Sessions via API
+
+### Get Sessions
+
+```typescript
+const response = await fetch("https://api.helicone.ai/v1/session/query", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    search: "",
+    timeFilter: {
+      startTimeUnixMs: Date.now() - 7 * 24 * 60 * 60 * 1000,
+      endTimeUnixMs: Date.now(),
+    },
+    timezoneDifference: 0,
+    filter: "all",
+    offset: 0,
+    limit: 50,
+  }),
+});
+
+const { data } = await response.json();
+```
+
+### Get Session Names
+
+```typescript
+const response = await fetch("https://api.helicone.ai/v1/session/name/query", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    nameContains: "",
+    timezoneDifference: 0,
+  }),
+});
+
+const { data } = await response.json();
+```
+
+### Get Session Metrics
+
+```typescript
+const response = await fetch("https://api.helicone.ai/v1/session/metrics/query", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    nameContains: "Content Generation Agent",
+    timezoneDifference: 0,
+    pSize: "p75",
+  }),
+});
+
+const { data } = await response.json();
+console.log("Session metrics:", data);
+```
+
+## Session Feedback and Tagging
+
+### Add Feedback to Session
+
+```typescript
+const response = await fetch(
+  `https://api.helicone.ai/v1/session/${sessionId}/feedback`,
+  {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      rating: true, // true for positive, false for negative
+    }),
+  }
+);
+```
+
+### Tag Sessions
+
+Add categorical tags to sessions for organization:
+
+```typescript
+const response = await fetch(
+  `https://api.helicone.ai/v1/session/${sessionId}/tag`,
+  {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      tag: "resolved", // or "escalated", "bug", etc.
+    }),
+  }
+);
+```
+
+## Best Practices
+
+<AccordionGroup>
+<Accordion title="Use Unique Session IDs">
+Generate a new UUID for each session to avoid mixing unrelated requests:
+
+```typescript
+import { randomUUID } from "crypto";
+
+const sessionId = randomUUID(); // Unique for this conversation
+```
+</Accordion>
+
+<Accordion title="Design Meaningful Paths">
+Use paths that represent conceptual groupings, not just chronological order:
+
+```typescript
+// Good - groups by function
+"/research/search"      // All search operations
+"/research/summarize"  // All summarization operations
+"/generate/outline"    // All outline generation
+
+// Avoid - just chronological
+"/step_1"
+"/step_2"
+"/step_3"
+```
+</Accordion>
+
+<Accordion title="Keep Session Names Consistent">
+Use the same session name for similar workflows:
+
+```typescript
+// Good - consistent naming
+const sessionName = "Customer Support Chat";
+
+// Avoid - varying names
+const sessionName = `Support ${userId} ${timestamp}`;
+```
+</Accordion>
+
+<Accordion title="Track Session Outcomes">
+Add feedback or tags to mark session success/failure:
+
+```typescript
+// After session completes
+await fetch(`https://api.helicone.ai/v1/session/${sessionId}/feedback`, {
+  method: "POST",
+  headers: { /* auth headers */ },
+  body: JSON.stringify({ rating: userWasSatisfied }),
+});
+```
+</Accordion>
+
+<Accordion title="Combine with Custom Properties">
+Add properties to individual requests within sessions:
+
+```typescript
+headers: {
+  "Helicone-Session-Id": sessionId,
+  "Helicone-Session-Path": "/research",
+  "Helicone-Session-Name": "Research Agent",
+  "Helicone-Property-Step-Type": "web_search",
+  "Helicone-Property-User-Id": userId,
+}
+```
+</Accordion>
+</AccordionGroup>
+
+## Common Use Cases
+
+<Tabs>
+<Tab title="Debugging Agent Failures">
+**Problem**: Your AI agent occasionally produces incorrect results.
+
+**Solution**:
+1. Filter sessions by negative feedback or error tags
+2. View the complete session trace to see all steps
+3. Identify which step in the workflow failed
+4. Compare failed sessions to successful ones
+5. Fix the problematic step
+
+```typescript
+// Tag failed sessions
+await fetch(`https://api.helicone.ai/v1/session/${sessionId}/tag`, {
+  method: "POST",
+  headers: { /* auth */ },
+  body: JSON.stringify({ tag: "error" }),
+});
+```
+</Tab>
+
+<Tab title="Optimizing Conversation Flow">
+**Problem**: Multi-turn conversations are taking too long.
+
+**Solution**:
+1. View session metrics to see average duration
+2. Identify which paths take the longest
+3. Look for unnecessary steps or redundant calls
+4. Optimize slow paths
+5. Compare session durations before/after changes
+</Tab>
+
+<Tab title="Tracking User Journeys">
+**Problem**: Want to understand how users interact with your AI.
+
+**Solution**:
+1. Use consistent session names for different features
+2. Filter sessions by session name
+3. Analyze common paths users take
+4. Identify where users drop off
+5. Optimize based on user behavior patterns
+</Tab>
+</Tabs>
+
+## Related Features
+
+<CardGroup cols={2}>
+<Card title="Requests" icon="message" href="/observability/requests">
+View individual requests within sessions
+</Card>
+
+<Card title="Traces" icon="route" href="/observability/traces">
+Advanced distributed tracing for complex workflows
+</Card>
+
+<Card title="Custom Properties" icon="tag" href="/observability/custom-properties">
+Add metadata to requests and sessions
+</Card>
+
+<Card title="User Metrics" icon="users" href="/observability/user-metrics">
+Analyze user behavior across sessions
+</Card>
+</CardGroup>
+
+<Card
+  title="Complete Session Example"
+  icon="js"
+  iconType="duotone"
+  href="https://github.com/Helicone/helicone/blob/main/examples/session_example/index.ts"
+>
+  Full implementation showing session hierarchy and tracking
+</Card>
+
+<QuestionsSection />

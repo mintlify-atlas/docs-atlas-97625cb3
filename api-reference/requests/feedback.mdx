@@ -1,0 +1,100 @@
+---
+title: 'Submit Feedback'
+api: 'POST https://api.helicone.ai/v1/request/{requestId}/feedback'
+description: 'Add user feedback to a request'
+---
+
+## Overview
+
+Submit thumbs up/down feedback for a specific request to track quality and user satisfaction.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Your Helicone API key. Format: `Bearer YOUR_API_KEY`
+</ParamField>
+
+## Path Parameters
+
+<ParamField path="requestId" type="string" required>
+  The unique identifier of the request
+</ParamField>
+
+## Request Body
+
+<ParamField body="rating" type="boolean" required>
+  Feedback rating: `true` for positive, `false` for negative
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="null">
+  Returns null on success
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if request failed
+</ResponseField>
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.helicone.ai/v1/request/req_abc123/feedback \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "rating": true
+  }'
+```
+
+```python Python
+import requests
+
+url = "https://api.helicone.ai/v1/request/req_abc123/feedback"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json"
+}
+payload = {
+    "rating": True
+}
+
+response = requests.post(url, json=payload, headers=headers)
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.helicone.ai/v1/request/req_abc123/feedback',
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      rating: true,
+    }),
+  }
+);
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 201 Success
+{
+  "data": null,
+  "error": null
+}
+```
+
+```json 500 Error
+{
+  "data": null,
+  "error": "Failed to submit feedback"
+}
+```
+
+</ResponseExample>

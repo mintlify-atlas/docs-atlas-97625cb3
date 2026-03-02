@@ -1,0 +1,559 @@
+---
+title: "Deploying Prompts"
+sidebarTitle: "Deployment"
+description: "Deploy prompt versions to production, staging, and custom environments"
+"twitter:title": "Deploying Prompts | Helicone OSS LLM Observability"
+---
+
+Environment-based deployment allows you to test prompts in staging before pushing to production, maintain separate versions for different deployment stages, and instantly rollback if issues arise.
+
+## Environment Overview
+
+Helicone supports multiple deployment environments for your prompts:
+
+- **Production** - Your live production environment
+- **Staging** - Pre-production testing environment
+- **Development** - Local development environment
+- **Custom environments** - Any environment name you choose
+
+<Frame>
+  <video width="100%" autoPlay loop muted playsInline>
+    <source
+      src="https://marketing-assets-helicone.s3.us-west-2.amazonaws.com/Prompts2025-Environment.mp4"
+      type="video/mp4"
+    />
+    <img
+      src="/static/features/prompts/environment_placeholder.png"
+      alt="Managing prompt environments in Helicone dashboard"
+    />
+  </video>
+</Frame>
+
+## Deploying Versions
+
+### From the Dashboard
+
+Deploy versions to environments directly from the Helicone dashboard:
+
+<Steps>
+  <Step title="Navigate to Prompt">
+    Open the prompt you want to deploy in the dashboard.
+  </Step>
+
+  <Step title="Select Version">
+    Choose the version you want to deploy from the version history.
+  </Step>
+
+  <Step title="Deploy to Environment">
+    Click the deploy button and select the target environment:
+    - Production
+    - Staging
+    - Development
+    - Or enter a custom environment name
+  </Step>
+
+  <Step title="Confirm Deployment">
+    Review the deployment details and confirm. The version is now live in that environment.
+  </Step>
+</Steps>
+
+<Note>
+  A single version can be deployed to multiple environments simultaneously. For example, you might deploy v1.5 to both staging and development for testing.
+</Note>
+
+### Via API
+
+Deploy versions programmatically using the Helicone API:
+
+<CodeGroup>
+  ```typescript TypeScript
+  async function deployToEnvironment(
+    promptId: string,
+    versionId: string,
+    environment: string
+  ) {
+    const response = await fetch(
+      "https://api.helicone.ai/v1/prompt-2025/update/environment",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          promptId,
+          promptVersionId: versionId,
+          environment
+        })
+      }
+    );
+
+    const result = await response.json();
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    console.log(`Deployed to ${environment}`);
+  }
+
+  // Deploy to production
+  await deployToEnvironment(
+    "abc123",
+    "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "production"
+  );
+  ```
+
+  ```python Python
+  import requests
+  import os
+
+  def deploy_to_environment(
+      prompt_id: str,
+      version_id: str,
+      environment: str
+  ):
+      response = requests.post(
+          "https://api.helicone.ai/v1/prompt-2025/update/environment",
+          headers={
+              "Authorization": f"Bearer {os.environ.get('HELICONE_API_KEY')}",
+              "Content-Type": "application/json"
+          },
+          json={
+              "promptId": prompt_id,
+              "promptVersionId": version_id,
+              "environment": environment
+          }
+      )
+
+      result = response.json()
+      if result.get("error"):
+          raise Exception(result["error"])
+
+      print(f"Deployed to {environment}")
+
+  # Deploy to production
+  deploy_to_environment(
+      "abc123",
+      "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+      "production"
+  )
+  ```
+
+  ```bash cURL
+  curl -X POST https://api.helicone.ai/v1/prompt-2025/update/environment \
+    -H "Authorization: Bearer $HELICONE_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "promptId": "abc123",
+      "promptVersionId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+      "environment": "production"
+    }'
+  ```
+</CodeGroup>
+
+## Using Deployed Versions
+
+Reference environments in your application code:
+
+<CodeGroup>
+  ```typescript TypeScript
+  import { OpenAI } from "openai";
+  import { HeliconeChatCreateParams } from "@helicone/helpers";
+
+  const openai = new OpenAI({
+    baseURL: "https://ai-gateway.helicone.ai",
+    apiKey: process.env.HELICONE_API_KEY,
+  });
+
+  // Production traffic
+  const prodResponse = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    prompt_id: "abc123",
+    environment: "production",
+    inputs: { user_name: "Alice" }
+  } as HeliconeChatCreateParams);
+
+  // Staging traffic
+  const stagingResponse = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    prompt_id: "abc123",
+    environment: "staging",
+    inputs: { user_name: "Alice" }
+  } as HeliconeChatCreateParams);
+  ```
+
+  ```python Python
+  import openai
+  import os
+
+  client = openai.OpenAI(
+      base_url="https://ai-gateway.helicone.ai",
+      api_key=os.environ.get("HELICONE_API_KEY")
+  )
+
+  # Production traffic
+  prod_response = client.chat.completions.create(
+      model="gpt-4o-mini",
+      prompt_id="abc123",
+      environment="production",
+      inputs={"user_name": "Alice"}
+  )
+
+  # Staging traffic
+  staging_response = client.chat.completions.create(
+      model="gpt-4o-mini",
+      prompt_id="abc123",
+      environment="staging",
+      inputs={"user_name": "Alice"}
+  )
+  ```
+</CodeGroup>
+
+<Tip>
+  Use environment variables to control which environment your application uses:
+  ```typescript
+  const environment = process.env.NODE_ENV === 'production' 
+    ? 'production' 
+    : 'staging';
+
+  const response = await openai.chat.completions.create({
+    prompt_id: "abc123",
+    environment,
+    inputs: { user_name: "Alice" }
+  } as HeliconeChatCreateParams);
+  ```
+</Tip>
+
+## Removing Environment Deployments
+
+You can remove a version from an environment without deleting the version:
+
+<CodeGroup>
+  ```typescript TypeScript
+  async function removeFromEnvironment(
+    promptId: string,
+    versionId: string,
+    environment: string
+  ) {
+    const response = await fetch(
+      "https://api.helicone.ai/v1/prompt-2025/remove/environment",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          promptId,
+          promptVersionId: versionId,
+          environment
+        })
+      }
+    );
+
+    const result = await response.json();
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    console.log(`Removed from ${environment}`);
+  }
+  ```
+
+  ```python Python
+  def remove_from_environment(
+      prompt_id: str,
+      version_id: str,
+      environment: str
+  ):
+      response = requests.post(
+          "https://api.helicone.ai/v1/prompt-2025/remove/environment",
+          headers={
+              "Authorization": f"Bearer {os.environ.get('HELICONE_API_KEY')}",
+              "Content-Type": "application/json"
+          },
+          json={
+              "promptId": prompt_id,
+              "promptVersionId": version_id,
+              "environment": environment
+          }
+      )
+
+      result = response.json()
+      if result.get("error"):
+          raise Exception(result["error"])
+
+      print(f"Removed from {environment}")
+  ```
+
+  ```bash cURL
+  curl -X POST https://api.helicone.ai/v1/prompt-2025/remove/environment \
+    -H "Authorization: Bearer $HELICONE_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "promptId": "abc123",
+      "promptVersionId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+      "environment": "staging"
+    }'
+  ```
+</CodeGroup>
+
+## Deployment Strategies
+
+### Progressive Rollout
+
+Gradually roll out prompt changes:
+
+<Steps>
+  <Step title="Deploy to Development">
+    Test the new version in your local development environment.
+  </Step>
+
+  <Step title="Deploy to Staging">
+    Once validated locally, deploy to staging for integration testing.
+  </Step>
+
+  <Step title="Canary Deployment (Optional)">
+    Deploy to a custom "canary" environment and route a small percentage of production traffic to it.
+  </Step>
+
+  <Step title="Deploy to Production">
+    After thorough testing, deploy to production.
+  </Step>
+</Steps>
+
+### Blue-Green Deployment
+
+Maintain two production environments:
+
+```typescript
+// Blue environment (current production)
+const blueResponse = await openai.chat.completions.create({
+  prompt_id: "abc123",
+  environment: "production-blue",
+  inputs: { user_name: "Alice" }
+} as HeliconeChatCreateParams);
+
+// Green environment (new version)
+const greenResponse = await openai.chat.completions.create({
+  prompt_id: "abc123",
+  environment: "production-green",
+  inputs: { user_name: "Alice" }
+} as HeliconeChatCreateParams);
+
+// Switch traffic by changing environment in your code
+```
+
+### Feature Flags
+
+Combine environments with feature flags:
+
+```typescript
+import { OpenAI } from "openai";
+import { HeliconeChatCreateParams } from "@helicone/helpers";
+
+const openai = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+// Determine environment based on feature flag
+const useNewPrompt = await featureFlags.isEnabled("new-prompt-v2");
+const environment = useNewPrompt ? "production-v2" : "production";
+
+const response = await openai.chat.completions.create({
+  prompt_id: "abc123",
+  environment,
+  inputs: { user_name: "Alice" }
+} as HeliconeChatCreateParams);
+```
+
+## Monitoring Deployments
+
+After deploying to an environment, monitor key metrics:
+
+- **Request volume** - Track traffic to each environment
+- **Error rates** - Watch for increases after deployment
+- **Response quality** - Monitor user feedback and scores
+- **Cost changes** - Track token usage and costs
+- **Latency** - Ensure performance remains acceptable
+
+<Frame>
+  <img src="/static/features/prompts/deployment_metrics.png" alt="Monitoring deployed prompt performance" />
+</Frame>
+
+## Rollback
+
+If issues arise, instantly rollback by deploying a previous version:
+
+<Steps>
+  <Step title="Identify Working Version">
+    Find the last known good version in the version history.
+  </Step>
+
+  <Step title="Deploy Previous Version">
+    Deploy the working version to the affected environment:
+
+    ```typescript
+    await deployToEnvironment(
+      "abc123",
+      "previous-working-version-id",
+      "production"
+    );
+    ```
+  </Step>
+
+  <Step title="Verify Rollback">
+    Test that the rollback resolved the issue.
+  </Step>
+
+  <Step title="Investigate">
+    Analyze what went wrong with the newer version before attempting to redeploy.
+  </Step>
+</Steps>
+
+<Warning>
+  Rolling back is instant, but you should still investigate the root cause to prevent similar issues in future deployments.
+</Warning>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Test in Staging First">
+    Never deploy directly to production without testing in staging:
+    1. Deploy to staging
+    2. Run integration tests
+    3. Monitor for at least 24 hours
+    4. Review metrics and feedback
+    5. Only then deploy to production
+  </Accordion>
+
+  <Accordion title="Use Descriptive Environment Names">
+    Create custom environments for specific purposes:
+    - `production` - Live production traffic
+    - `staging` - Pre-production testing
+    - `development` - Local development
+    - `production-canary` - Canary deployments
+    - `ab-test-variant-b` - A/B testing
+    - `partner-integration` - External partner testing
+  </Accordion>
+
+  <Accordion title="Monitor After Deployment">
+    Set up alerts for:
+    - Error rate increases
+    - Latency spikes
+    - Cost anomalies
+    - User feedback sentiment changes
+
+    Monitor for at least 24-48 hours after production deployment.
+  </Accordion>
+
+  <Accordion title="Document Deployment Changes">
+    Keep a deployment log:
+    - What version was deployed
+    - When it was deployed
+    - Who deployed it
+    - What changed
+    - Any issues observed
+
+    This helps with debugging and team coordination.
+  </Accordion>
+
+  <Accordion title="Maintain Version Parity">
+    Keep staging in sync with production:
+    - Deploy to staging before production
+    - After production deployment, verify staging matches
+    - Regularly clean up old staging deployments
+  </Accordion>
+</AccordionGroup>
+
+## API Reference
+
+### Set Version Environment
+
+**Endpoint**: `POST /v1/prompt-2025/update/environment`
+
+**Request Body**:
+```typescript
+{
+  promptId: string;           // Prompt ID
+  promptVersionId: string;    // Version ID to deploy
+  environment: string;        // Target environment
+}
+```
+
+**Response**:
+```typescript
+{
+  data: null,
+  error?: string
+}
+```
+
+### Remove Version from Environment
+
+**Endpoint**: `POST /v1/prompt-2025/remove/environment`
+
+**Request Body**:
+```typescript
+{
+  promptId: string;           // Prompt ID
+  promptVersionId: string;    // Version ID to remove
+  environment: string;        // Environment to remove from
+}
+```
+
+**Response**:
+```typescript
+{
+  data: null,
+  error?: string
+}
+```
+
+### Get Environment Version
+
+**Endpoint**: `POST /v1/prompt-2025/query/environment-version`
+
+**Request Body**:
+```typescript
+{
+  promptId: string;      // Prompt ID
+  environment: string;   // Environment name
+}
+```
+
+**Response**:
+```typescript
+{
+  data: Prompt2025Version,
+  error?: string
+}
+```
+
+### List All Environments
+
+**Endpoint**: `GET /v1/prompt-2025/environments`
+
+**Response**:
+```typescript
+{
+  data: string[],  // Array of environment names
+  error?: string
+}
+```
+
+## Related Documentation
+
+<CardGroup cols={2}>
+<Card title="Overview" icon="book" href="/prompts/overview">
+  Get started with Prompt Management
+</Card>
+<Card title="Versioning" icon="code-branch" href="/prompts/versioning">
+  Learn about prompt versioning
+</Card>
+<Card title="SDK Integration" icon="code" href="/prompts/sdk">
+  Use environments via SDK
+</Card>
+</CardGroup>

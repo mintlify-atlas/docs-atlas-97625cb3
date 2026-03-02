@@ -1,0 +1,175 @@
+---
+title: 'Create Prompt'
+api: 'POST https://api.helicone.ai/v1/prompt/create'
+description: 'Create a new prompt template with versioning'
+---
+
+## Overview
+
+Create a new prompt template in Helicone for version control and management.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Your Helicone API key. Format: `Bearer YOUR_API_KEY`
+</ParamField>
+
+## Request Body
+
+<ParamField body="userDefinedId" type="string" required>
+  Unique identifier for the prompt (e.g., "customer-support-v1")
+</ParamField>
+
+<ParamField body="prompt" type="object" required>
+  Prompt template object in Helicone template format
+  
+  Example:
+  ```json
+  {
+    "model": "gpt-4",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a helpful assistant."
+      }
+    ]
+  }
+  ```
+</ParamField>
+
+<ParamField body="metadata" type="object" required>
+  Additional metadata for the prompt
+  
+  Example:
+  ```json
+  {
+    "description": "Customer support prompt",
+    "tags": ["support", "production"]
+  }
+  ```
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="object">
+  Created prompt information
+  
+  <Expandable title="prompt response">
+    <ResponseField name="id" type="string">
+      Unique prompt ID
+    </ResponseField>
+    <ResponseField name="prompt_version_id" type="string">
+      ID of the created prompt version
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if request failed
+</ResponseField>
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.helicone.ai/v1/prompt/create \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "userDefinedId": "customer-support-v1",
+    "prompt": {
+      "model": "gpt-4",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful customer support assistant."
+        }
+      ]
+    },
+    "metadata": {
+      "description": "Main customer support prompt",
+      "tags": ["support", "production"]
+    }
+  }'
+```
+
+```python Python
+import requests
+
+url = "https://api.helicone.ai/v1/prompt/create"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json"
+}
+
+payload = {
+    "userDefinedId": "customer-support-v1",
+    "prompt": {
+        "model": "gpt-4",
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a helpful customer support assistant."
+            }
+        ]
+    },
+    "metadata": {
+        "description": "Main customer support prompt",
+        "tags": ["support", "production"]
+    }
+}
+
+response = requests.post(url, json=payload, headers=headers)
+data = response.json()
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.helicone.ai/v1/prompt/create', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    userDefinedId: 'customer-support-v1',
+    prompt: {
+      model: 'gpt-4',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a helpful customer support assistant.',
+        },
+      ],
+    },
+    metadata: {
+      description: 'Main customer support prompt',
+      tags: ['support', 'production'],
+    },
+  }),
+});
+
+const data = await response.json();
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 201 Success
+{
+  "data": {
+    "id": "prompt_abc123",
+    "prompt_version_id": "pv_xyz789"
+  },
+  "error": null
+}
+```
+
+```json 500 Error
+{
+  "data": null,
+  "error": "Failed to create prompt"
+}
+```
+
+</ResponseExample>

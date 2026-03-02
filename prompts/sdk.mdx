@@ -1,0 +1,781 @@
+---
+title: "Prompts SDK"
+sidebarTitle: "SDK"
+description: "Use prompts directly via SDK without the AI Gateway"
+"twitter:title": "Prompts SDK | Helicone OSS LLM Observability"
+---
+
+The Helicone SDK provides direct access to prompt compilation and management. While we recommend using the [AI Gateway](/gateway/prompt-integration) for most use cases, the SDK is ideal when you need direct control over prompt compilation or can't use the gateway.
+
+## SDK vs AI Gateway
+
+Choose the right integration method for your use case:
+
+| Feature | AI Gateway | SDK |
+|---------|------------|-----|
+| **Automatic compilation** | ✓ | Manual |
+| **Input tracing** | ✓ | ✗ |
+| **Latency** | Lower | Higher |
+| **Setup complexity** | Simpler | More complex |
+| **Prompt partial support** | Automatic | Manual |
+| **Use case** | Production apps | Testing, special requirements |
+
+<Note>
+  **Recommendation**: Use the [AI Gateway](/gateway/prompt-integration) unless you have a specific reason to use the SDK directly.
+</Note>
+
+## Installation
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```bash
+    npm install @helicone/helpers
+    ```
+  </Tab>
+  
+  <Tab title="Python">
+    ```bash
+    pip install helicone-helpers openai
+    ```
+    
+    **Note:** The OpenAI Python SDK is required for prompt management features.
+  </Tab>
+</Tabs>
+
+## Quick Start
+
+<Tabs>
+  <Tab title="TypeScript">
+    <CodeGroup>
+      ```typescript Basic Usage
+      import OpenAI from 'openai';
+      import { HeliconePromptManager } from '@helicone/helpers';
+
+      const openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      });
+
+      const promptManager = new HeliconePromptManager({
+        apiKey: process.env.HELICONE_API_KEY
+      });
+
+      async function generateWithPrompt() {
+        // Get compiled prompt with variable substitution
+        const { body, errors } = await promptManager.getPromptBody({
+          prompt_id: "abc123",
+          model: "gpt-4o-mini",
+          inputs: {
+            customer_name: "Alice Johnson",
+            product: "AI Gateway"
+          }
+        });
+
+        // Check for validation errors
+        if (errors.length > 0) {
+          console.warn("Validation errors:", errors);
+        }
+
+        // Use compiled prompt with OpenAI SDK
+        const response = await openai.chat.completions.create(body);
+        console.log(response.choices[0].message.content);
+      }
+      ```
+
+      ```typescript With Environment
+      async function useEnvironmentVersion() {
+        const { body, errors } = await promptManager.getPromptBody({
+          prompt_id: "abc123",
+          environment: "staging", // Use staging environment
+          model: "gpt-4o-mini",
+          inputs: {
+            user_query: "How does caching work?",
+            context: "technical documentation"
+          },
+          messages: [
+            { role: "user", content: "Follow up question..." }
+          ]
+        });
+
+        if (errors.length > 0) {
+          console.warn("Variable validation failed:", errors);
+        }
+
+        return await openai.chat.completions.create(body);
+      }
+      ```
+    </CodeGroup>
+  </Tab>
+
+  <Tab title="Python">
+    <CodeGroup>
+      ```python Basic Usage
+      import openai
+      import os
+      from helicone_helpers import HeliconePromptManager
+
+      client = openai.OpenAI(
+          api_key=os.environ.get("OPENAI_API_KEY")
+      )
+
+      prompt_manager = HeliconePromptManager(
+          api_key=os.environ.get("HELICONE_API_KEY")
+      )
+
+      def generate_with_prompt():
+          # Get compiled prompt with variable substitution
+          result = prompt_manager.get_prompt_body({
+              "prompt_id": "abc123",
+              "model": "gpt-4o-mini",
+              "inputs": {
+                  "customer_name": "Alice Johnson",
+                  "product": "AI Gateway"
+              }
+          })
+
+          # Check for validation errors
+          if result["errors"]:
+              print("Validation errors:", result["errors"])
+
+          # Use compiled prompt with OpenAI SDK
+          response = client.chat.completions.create(**result["body"])
+          print(response.choices[0].message.content)
+      ```
+
+      ```python With Environment
+      def use_environment_version():
+          result = prompt_manager.get_prompt_body({
+              "prompt_id": "abc123",
+              "environment": "staging",  # Use staging environment
+              "model": "gpt-4o-mini",
+              "inputs": {
+                  "user_query": "How does caching work?",
+                  "context": "technical documentation"
+              },
+              "messages": [
+                  {"role": "user", "content": "Follow up question..."}
+              ]
+          })
+
+          if result["errors"]:
+              print("Variable validation failed:", result["errors"])
+
+          return client.chat.completions.create(**result["body"])
+      ```
+    </CodeGroup>
+  </Tab>
+</Tabs>
+
+## HeliconePromptManager
+
+The main class for prompt management:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import { HeliconePromptManager } from '@helicone/helpers';
+
+    const promptManager = new HeliconePromptManager({
+      apiKey: "your-helicone-api-key",
+      baseUrl: "https://api.helicone.ai" // Optional, defaults to this URL
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Python">
+    ```python
+    from helicone_helpers import HeliconePromptManager
+
+    prompt_manager = HeliconePromptManager(
+        api_key="your-helicone-api-key",
+        base_url="https://api.helicone.ai"  # Optional
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Core Methods
+
+### getPromptBody()
+
+Compiles a prompt with variable substitution and runtime parameters.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const { body, errors } = await promptManager.getPromptBody({
+      prompt_id: "abc123",
+      environment: "production",  // Optional
+      version_id: "uuid",         // Optional
+      model: "gpt-4o-mini",
+      inputs: {
+        customer_name: "Alice",
+        age: 25
+      },
+      messages: [                 // Optional: appended to prompt messages
+        { role: "user", content: "Additional context" }
+      ],
+      temperature: 0.7,           // Optional: overrides prompt temperature
+      max_tokens: 1000            // Optional: overrides prompt max_tokens
+    });
+
+    // Returns:
+    // - body: Complete OpenAI request body
+    // - errors: Array of validation errors (if any)
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    result = prompt_manager.get_prompt_body({
+        "prompt_id": "abc123",
+        "environment": "production",  # Optional
+        "version_id": "uuid",         # Optional
+        "model": "gpt-4o-mini",
+        "inputs": {
+            "customer_name": "Alice",
+            "age": 25
+        },
+        "messages": [                 # Optional: appended to prompt messages
+            {"role": "user", "content": "Additional context"}
+        ],
+        "temperature": 0.7,           # Optional: overrides prompt temperature
+        "max_tokens": 1000            # Optional: overrides prompt max_tokens
+    })
+
+    # Returns dict with:
+    # - body: Complete OpenAI request body
+    # - errors: Array of validation errors (if any)
+    ```
+  </Tab>
+</Tabs>
+
+### pullPromptVersion()
+
+Retrieves the appropriate prompt version based on environment or version ID.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const version = await promptManager.pullPromptVersion({
+      prompt_id: "abc123",
+      environment: "production"  // Or use version_id instead
+    });
+
+    console.log(version.id);
+    console.log(version.major_version);
+    console.log(version.minor_version);
+    console.log(version.commit_message);
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    version = prompt_manager.pull_prompt_version({
+        "prompt_id": "abc123",
+        "environment": "production"  # Or use version_id instead
+    })
+
+    print(version["id"])
+    print(version["major_version"])
+    print(version["minor_version"])
+    print(version["commit_message"])
+    ```
+  </Tab>
+</Tabs>
+
+### pullPromptBody()
+
+Fetches the raw prompt body from storage.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const promptBody = await promptManager.pullPromptBody({
+      prompt_id: "abc123",
+      environment: "production"  // Optional
+    });
+
+    // Returns raw OpenAI-compatible prompt body
+    console.log(promptBody.messages);
+    console.log(promptBody.temperature);
+    console.log(promptBody.tools);
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    prompt_body = prompt_manager.pull_prompt_body({
+        "prompt_id": "abc123",
+        "environment": "production"  # Optional
+    })
+
+    # Returns raw OpenAI-compatible prompt body
+    print(prompt_body["messages"])
+    print(prompt_body["temperature"])
+    print(prompt_body["tools"])
+    ```
+  </Tab>
+</Tabs>
+
+### mergePromptBody()
+
+Merges a prompt body with runtime parameters and performs variable substitution.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const sourceBody = await promptManager.pullPromptBody({
+      prompt_id: "abc123"
+    });
+
+    const { body, errors } = await promptManager.mergePromptBody(
+      {
+        prompt_id: "abc123",
+        model: "gpt-4o-mini",
+        inputs: { name: "Alice" },
+        temperature: 0.5  // Overrides source temperature
+      },
+      sourceBody
+    );
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    source_body = prompt_manager.pull_prompt_body({
+        "prompt_id": "abc123"
+    })
+
+    result = prompt_manager.merge_prompt_body(
+        {
+            "prompt_id": "abc123",
+            "model": "gpt-4o-mini",
+            "inputs": {"name": "Alice"},
+            "temperature": 0.5  # Overrides source temperature
+        },
+        source_body
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Handling Prompt Partials
+
+[Prompt partials](/prompts/overview#prompt-partials) allow you to reference messages from other prompts. When using the SDK, you must manually resolve these references.
+
+<Warning>
+  **AI Gateway Recommended**: Prompt partials are automatically resolved when using the AI Gateway. Only use manual resolution if you must use the SDK directly.
+</Warning>
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    async function resolvePromptPartials() {
+      // Step 1: Fetch the main prompt body
+      const mainPromptBody = await promptManager.pullPromptBody({
+        prompt_id: "xyz789"
+      });
+
+      // Step 2: Extract all prompt partial references
+      const promptPartials = promptManager.extractPromptPartials(mainPromptBody);
+
+      // Step 3: Fetch and resolve each prompt partial
+      const promptPartialInputs: Record<string, string> = {};
+
+      for (const partial of promptPartials) {
+        // Fetch the referenced prompt's body
+        const partialBody = await promptManager.pullPromptBody({
+          prompt_id: partial.prompt_id,
+          environment: partial.environment || "production"
+        });
+
+        // Extract the specific message content
+        const substitutionValue = promptManager.getPromptPartialSubstitutionValue(
+          partial,
+          partialBody
+        );
+
+        // Map the template tag to its resolved content
+        promptPartialInputs[partial.raw] = substitutionValue;
+      }
+
+      // Step 4: Merge with resolved partials
+      const { body, errors } = await promptManager.mergePromptBody(
+        {
+          prompt_id: "xyz789",
+          model: "gpt-4o-mini",
+          inputs: { user_name: "Alice" }
+        },
+        mainPromptBody,
+        promptPartialInputs  // Pass resolved partials
+      );
+
+      if (errors.length > 0) {
+        console.warn("Validation errors:", errors);
+      }
+
+      return body;
+    }
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    def resolve_prompt_partials():
+        # Step 1: Fetch the main prompt body
+        main_prompt_body = prompt_manager.pull_prompt_body({
+            "prompt_id": "xyz789"
+        })
+
+        # Step 2: Extract all prompt partial references
+        prompt_partials = prompt_manager.extract_prompt_partials(main_prompt_body)
+
+        # Step 3: Fetch and resolve each prompt partial
+        prompt_partial_inputs = {}
+
+        for partial in prompt_partials:
+            # Fetch the referenced prompt's body
+            partial_body = prompt_manager.pull_prompt_body({
+                "prompt_id": partial["prompt_id"],
+                "environment": partial.get("environment", "production")
+            })
+
+            # Extract the specific message content
+            substitution_value = prompt_manager.get_prompt_partial_substitution_value(
+                partial,
+                partial_body
+            )
+
+            # Map the template tag to its resolved content
+            prompt_partial_inputs[partial["raw"]] = substitution_value
+
+        # Step 4: Merge with resolved partials
+        result = prompt_manager.merge_prompt_body(
+            {
+                "prompt_id": "xyz789",
+                "model": "gpt-4o-mini",
+                "inputs": {"user_name": "Alice"}
+            },
+            main_prompt_body,
+            prompt_partial_inputs  # Pass resolved partials
+        )
+
+        if result["errors"]:
+            print("Validation errors:", result["errors"])
+
+        return result["body"]
+    ```
+  </Tab>
+</Tabs>
+
+### Prompt Partial Methods
+
+<ParamField path="extractPromptPartials(promptBody)" type="function">
+  Extracts all prompt partial references from a prompt body.
+
+  **Returns**: Array of `PromptPartialVariable` objects with `prompt_id`, `index`, `environment`, and `raw` fields.
+</ParamField>
+
+<ParamField path="getPromptPartialSubstitutionValue(partial, sourceBody)" type="function">
+  Gets the message content to substitute for a prompt partial reference.
+
+  **Parameters**:
+  - `partial` - The prompt partial variable object
+  - `sourceBody` - The source prompt body to extract the message from
+
+  **Returns**: String content of the referenced message.
+</ParamField>
+
+## Error Handling
+
+The SDK provides detailed validation errors for type mismatches:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const { body, errors } = await promptManager.getPromptBody({
+      prompt_id: "abc123",
+      model: "gpt-4o-mini",
+      inputs: {
+        age: "not-a-number",  // Type mismatch
+        is_premium: "maybe"    // Invalid boolean
+      }
+    });
+
+    // Handle validation errors
+    if (errors.length > 0) {
+      errors.forEach(error => {
+        console.error(`Variable "${error.variable}" validation failed:`);
+        console.error(`  Expected: ${error.expected}`);
+        console.error(`  Received: ${JSON.stringify(error.value)}`);
+      });
+      
+      throw new Error(`Prompt validation failed: ${errors.length} errors`);
+    }
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    result = prompt_manager.get_prompt_body({
+        "prompt_id": "abc123",
+        "model": "gpt-4o-mini",
+        "inputs": {
+            "age": "not-a-number",  # Type mismatch
+            "is_premium": "maybe"    # Invalid boolean
+        }
+    })
+
+    # Handle validation errors
+    if result["errors"]:
+        for error in result["errors"]:
+            print(f'Variable "{error.variable}" validation failed:')
+            print(f"  Expected: {error.expected}")
+            print(f"  Received: {error.value}")
+        
+        raise ValueError(f'Prompt validation failed: {len(result["errors"])} errors')
+    ```
+  </Tab>
+</Tabs>
+
+## Type Definitions
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    // Parameters for prompt operations
+    interface HeliconePromptParams {
+      prompt_id?: string;
+      environment?: string;
+      version_id?: string;
+      inputs?: Record<string, any>;
+    }
+
+    // Extended chat completion params
+    interface HeliconeChatCreateParams extends ChatCompletionCreateParamsNonStreaming {
+      prompt_id?: string;
+      environment?: string;
+      version_id?: string;
+      inputs?: Record<string, any>;
+      messages?: HeliconeChatCompletionMessageParam[];  // Optional when using prompts
+    }
+
+    // Validation error structure
+    interface ValidationError {
+      variable: string;
+      expected: string;
+      value: any;
+    }
+
+    // Prompt version metadata
+    interface Prompt2025Version {
+      id: string;
+      model: string;
+      prompt_id: string;
+      major_version: number;
+      minor_version: number;
+      commit_message: string;
+      environments?: string[];
+      created_at: string;
+      s3_url?: string;
+      prompt_body?: Prompt2025VersionPromptBody;
+    }
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    # Parameters for prompt operations (dict)
+    {
+        "prompt_id": str,        # Optional
+        "environment": str,      # Optional
+        "version_id": str,       # Optional
+        "inputs": dict           # Optional
+    }
+
+    # Extended chat completion params (dict)
+    {
+        "prompt_id": str,
+        "environment": str,
+        "version_id": str,
+        "inputs": dict,
+        "messages": list,        # Optional when using prompts
+        "model": str,
+        "temperature": float,
+        # ... other OpenAI parameters
+    }
+
+    # Validation error structure (dict)
+    {
+        "variable": str,
+        "expected": str,
+        "value": any
+    }
+
+    # Prompt version metadata (dict)
+    {
+        "id": str,
+        "model": str,
+        "prompt_id": str,
+        "major_version": int,
+        "minor_version": int,
+        "commit_message": str,
+        "environments": list,    # Optional
+        "created_at": str,
+        "s3_url": str,          # Optional
+        "prompt_body": dict     # Optional
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Cache Prompt Bodies">
+    When using the SDK, cache compiled prompt bodies to reduce API calls:
+
+    ```typescript
+    const promptCache = new Map<string, any>();
+
+    async function getCachedPromptBody(promptId: string, environment: string) {
+      const cacheKey = `${promptId}:${environment}`;
+      
+      if (promptCache.has(cacheKey)) {
+        return promptCache.get(cacheKey);
+      }
+
+      const { body, errors } = await promptManager.getPromptBody({
+        prompt_id: promptId,
+        environment,
+        model: "gpt-4o-mini",
+        inputs: {}
+      });
+
+      if (errors.length === 0) {
+        promptCache.set(cacheKey, body);
+      }
+
+      return body;
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Handle Validation Errors Gracefully">
+    Always check for and handle validation errors:
+
+    ```typescript
+    const { body, errors } = await promptManager.getPromptBody(params);
+
+    if (errors.length > 0) {
+      // Log errors for debugging
+      console.error("Prompt validation errors:", errors);
+      
+      // Decide how to handle:
+      // 1. Throw an error
+      // 2. Use default values
+      // 3. Return a fallback response
+      // 4. Prompt user for correct values
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use Type-Safe Inputs">
+    Leverage TypeScript types for input validation:
+
+    ```typescript
+    interface CustomerPromptInputs {
+      customer_name: string;
+      age: number;
+      is_premium: boolean;
+    }
+
+    const inputs: CustomerPromptInputs = {
+      customer_name: "Alice",
+      age: 25,
+      is_premium: true
+    };
+
+    const { body, errors } = await promptManager.getPromptBody({
+      prompt_id: "abc123",
+      model: "gpt-4o-mini",
+      inputs
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Minimize Prompt Partial Nesting">
+    When using prompt partials with the SDK, keep nesting shallow to reduce API calls:
+
+    - Avoid partials that reference other partials
+    - Consider using the AI Gateway for complex partial structures
+    - Cache resolved partials when possible
+  </Accordion>
+</AccordionGroup>
+
+## Migrating to AI Gateway
+
+If you're currently using the SDK and want to migrate to the AI Gateway:
+
+<Steps>
+  <Step title="Update Base URL">
+    Change your OpenAI client to use the Helicone AI Gateway:
+
+    ```typescript
+    const openai = new OpenAI({
+      baseURL: "https://ai-gateway.helicone.ai",
+      apiKey: process.env.HELICONE_API_KEY,
+    });
+    ```
+  </Step>
+
+  <Step title="Simplify Code">
+    Replace SDK calls with direct chat completion calls:
+
+    ```typescript
+    // Before (SDK)
+    const { body } = await promptManager.getPromptBody({
+      prompt_id: "abc123",
+      environment: "production",
+      inputs: { name: "Alice" }
+    });
+    const response = await openai.chat.completions.create(body);
+
+    // After (AI Gateway)
+    const response = await openai.chat.completions.create({
+      prompt_id: "abc123",
+      environment: "production",
+      inputs: { name: "Alice" }
+    } as HeliconeChatCreateParams);
+    ```
+  </Step>
+
+  <Step title="Remove Manual Partial Resolution">
+    Delete all prompt partial resolution code - the gateway handles it automatically.
+  </Step>
+
+  <Step title="Test Thoroughly">
+    Verify that:
+    - Variables are substituted correctly
+    - Prompt partials work as expected
+    - Error handling behaves the same
+    - Performance is acceptable
+  </Step>
+</Steps>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+<Card title="Overview" icon="book" href="/prompts/overview">
+  Get started with Prompt Management
+</Card>
+<Card title="AI Gateway" icon="server" href="/gateway/prompt-integration">
+  Use prompts through the AI Gateway (recommended)
+</Card>
+<Card title="Versioning" icon="code-branch" href="/prompts/versioning">
+  Learn about prompt versioning
+</Card>
+<Card title="Deployment" icon="rocket" href="/prompts/deployment">
+  Deploy prompts to different environments
+</Card>
+</CardGroup>

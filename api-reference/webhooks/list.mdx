@@ -1,0 +1,105 @@
+---
+title: 'List Webhooks'
+api: 'GET https://api.helicone.ai/v1/webhooks'
+description: 'Get all webhooks configured for your organization'
+---
+
+## Overview
+
+Retrieve a list of all webhooks configured in your account.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Your Helicone API key. Format: `Bearer YOUR_API_KEY`
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="array">
+  Array of webhook objects
+  
+  <Expandable title="webhook object">
+    <ResponseField name="id" type="string">
+      Unique webhook ID
+    </ResponseField>
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    <ResponseField name="destination" type="string">
+      Webhook destination URL
+    </ResponseField>
+    <ResponseField name="version" type="string">
+      Webhook version (e.g., "2024-10-22")
+    </ResponseField>
+    <ResponseField name="config" type="string">
+      JSON string of webhook configuration
+    </ResponseField>
+    <ResponseField name="hmac_key" type="string">
+      HMAC key for webhook signature verification
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if request failed
+</ResponseField>
+
+<RequestExample>
+
+```bash cURL
+curl --request GET \
+  --url https://api.helicone.ai/v1/webhooks \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+```
+
+```python Python
+import requests
+
+url = "https://api.helicone.ai/v1/webhooks"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY"
+}
+
+response = requests.get(url, headers=headers)
+data = response.json()
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.helicone.ai/v1/webhooks', {
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+  },
+});
+
+const data = await response.json();
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200 Success
+{
+  "data": [
+    {
+      "id": "wh_abc123",
+      "created_at": "2024-02-01T10:00:00Z",
+      "destination": "https://example.com/webhook",
+      "version": "2024-10-22",
+      "config": "{\"sampleRate\":100,\"propertyFilters\":[],\"includeData\":true}",
+      "hmac_key": "sk_abc123xyz"
+    }
+  ],
+  "error": null
+}
+```
+
+```json 500 Error
+{
+  "data": null,
+  "error": "Failed to fetch webhooks"
+}
+```
+
+</ResponseExample>

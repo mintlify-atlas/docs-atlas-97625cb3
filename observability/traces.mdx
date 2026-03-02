@@ -1,0 +1,632 @@
+---
+title: "Traces"
+sidebarTitle: "Traces"
+description: "Distributed tracing for complex workflows, tracking requests across LLMs, vector databases, and tools"
+"twitter:title": "Traces - Helicone OSS LLM Observability"
+---
+
+import QuestionsSection from "/snippets/questions-section.mdx";
+
+## Overview
+
+Helicone supports distributed tracing for complex AI workflows that span multiple services, tools, and providers. While sessions group related requests, traces provide deeper instrumentation with OpenTelemetry (OTEL) support and custom trace logging for tracking requests across your entire stack.
+
+<Info>
+**Sessions vs Traces**: Sessions are simpler and work great for grouping LLM requests. Traces provide more detailed instrumentation for complex distributed systems with multiple services and tools.
+</Info>
+
+## Trace Types
+
+Helicone supports three types of tracing:
+
+<CardGroup cols={3}>
+<Card title="Session Traces" icon="diagram-project">
+Simple hierarchical grouping using session headers (recommended for most use cases)
+</Card>
+
+<Card title="OTEL Traces" icon="route">
+OpenTelemetry-based distributed tracing for complex multi-service workflows
+</Card>
+
+<Card title="Custom Traces" icon="code">
+Manual trace logging for custom workflows and non-LLM operations
+</Card>
+</CardGroup>
+
+## Session-Based Tracing
+
+The simplest form of tracing uses session headers to create hierarchical traces.
+
+### Quick Start
+
+```typescript
+import { randomUUID } from "crypto";
+import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+const sessionId = randomUUID();
+
+// Parent trace
+await client.chat.completions.create(
+  { model: "gpt-4o-mini", messages: [{ role: "user", content: "Analyze this data" }] },
+  { headers: {
+    "Helicone-Session-Id": sessionId,
+    "Helicone-Session-Path": "/analyze",
+    "Helicone-Session-Name": "Data Pipeline",
+  }}
+);
+
+// Child trace
+await client.chat.completions.create(
+  { model: "gpt-4o-mini", messages: [{ role: "user", content: "Summarize findings" }] },
+  { headers: {
+    "Helicone-Session-Id": sessionId,
+    "Helicone-Session-Path": "/analyze/summarize",
+    "Helicone-Session-Name": "Data Pipeline",
+  }}
+);
+```
+
+See the [Sessions documentation](/observability/sessions) for more details on session-based tracing.
+
+## OpenTelemetry Tracing
+
+For complex distributed systems, Helicone supports OpenTelemetry (OTEL) for standardized tracing across services.
+
+### Why Use OTEL Traces
+
+<AccordionGroup>
+<Accordion title="Multi-Service Workflows">
+Track requests across multiple microservices, each with their own LLM calls, database queries, and API calls.
+</Accordion>
+
+<Accordion title="Standard Instrumentation">
+Use industry-standard OpenTelemetry libraries and integrations that work across your entire stack.
+</Accordion>
+
+<Accordion title="Detailed Spans">
+Capture fine-grained timing data for every operation, not just LLM calls.
+</Accordion>
+
+<Accordion title="Cross-Platform">
+OTEL works across languages (Python, Node.js, Go, etc.) and platforms.
+</Accordion>
+</AccordionGroup>
+
+### OTEL Setup
+
+<Steps>
+<Step title="Install OpenTelemetry">
+Install OTEL packages for your language:
+
+<CodeGroup>
+```bash Node.js
+npm install @opentelemetry/api @opentelemetry/sdk-node
+```
+
+```bash Python
+pip install opentelemetry-api opentelemetry-sdk
+```
+</CodeGroup>
+</Step>
+
+<Step title="Configure OTEL Exporter">
+Set up OTEL to export traces to Helicone:
+
+```typescript
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter({
+    url: 'https://api.helicone.ai/v1/trace/log',
+    headers: {
+      'Authorization': `Bearer ${process.env.HELICONE_API_KEY}`,
+    },
+  }),
+});
+
+sdk.start();
+```
+</Step>
+
+<Step title="Create Spans">
+Instrument your code with OTEL spans:
+
+```typescript
+import { trace } from '@opentelemetry/api';
+
+const tracer = trace.getTracer('my-app');
+
+async function processRequest(userQuery: string) {
+  return await tracer.startActiveSpan('process-request', async (span) => {
+    try {
+      // Your LLM call here
+      const result = await client.chat.completions.create({...});
+      
+      span.setStatus({ code: SpanStatusCode.OK });
+      return result;
+    } catch (error) {
+      span.setStatus({ 
+        code: SpanStatusCode.ERROR, 
+        message: error.message 
+      });
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
+}
+```
+</Step>
+</Steps>
+
+### OTEL Trace Example
+
+```python
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+import os
+
+# Configure OTEL
+provider = TracerProvider()
+exporter = OTLPSpanExporter(
+    endpoint="https://api.helicone.ai/v1/trace/log",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('HELICONE_API_KEY')}"
+    }
+)
+provider.add_span_processor(BatchSpanProcessor(exporter))
+trace.set_tracer_provider(provider)
+
+tracer = trace.get_tracer(__name__)
+
+# Create traced workflow
+def complex_workflow(user_query):
+    with tracer.start_as_current_span("complex-workflow") as parent_span:
+        parent_span.set_attribute("user.query", user_query)
+        
+        # Step 1: Embedding
+        with tracer.start_as_current_span("generate-embedding"):
+            embedding = create_embedding(user_query)
+        
+        # Step 2: Vector search
+        with tracer.start_as_current_span("vector-search"):
+            results = search_vectors(embedding)
+        
+        # Step 3: LLM call
+        with tracer.start_as_current_span("llm-generation"):
+            response = generate_response(user_query, results)
+        
+        return response
+```
+
+## Custom Trace Logging
+
+For workflows that don't use standard LLM APIs, you can manually log custom traces to Helicone.
+
+### Use Cases
+
+- Logging non-LLM API calls (e.g., custom model serving)
+- Tracking tool calls and function executions
+- Recording vector database operations
+- Monitoring custom workflow steps
+
+### Custom Trace Format
+
+<CodeGroup>
+```typescript Node.js
+const response = await fetch("https://api.helicone.ai/v1/trace/custom/log", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    providerRequest: {
+      url: "https://api.example.com/v1/custom-model",
+      json: {
+        prompt: "Hello, world!",
+        max_tokens: 100,
+      },
+      meta: {
+        model: "custom-model-v1",
+      },
+    },
+    providerResponse: {
+      json: {
+        completion: "Hello! How can I help you today?",
+        tokens_used: 12,
+      },
+      status: 200,
+      headers: {},
+    },
+    timing: {
+      startTime: new Date("2024-01-15T10:00:00Z"),
+      endTime: new Date("2024-01-15T10:00:02Z"),
+      timeToFirstToken: 500,
+    },
+    provider: "custom",
+  }),
+});
+```
+
+```python Python
+import requests
+import os
+from datetime import datetime
+
+response = requests.post(
+    "https://api.helicone.ai/v1/trace/custom/log",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('HELICONE_API_KEY')}",
+        "Content-Type": "application/json",
+    },
+    json={
+        "providerRequest": {
+            "url": "https://api.example.com/v1/custom-model",
+            "json": {
+                "prompt": "Hello, world!",
+                "max_tokens": 100,
+            },
+            "meta": {
+                "model": "custom-model-v1",
+            },
+        },
+        "providerResponse": {
+            "json": {
+                "completion": "Hello! How can I help you today?",
+                "tokens_used": 12,
+            },
+            "status": 200,
+            "headers": {},
+        },
+        "timing": {
+            "startTime": "2024-01-15T10:00:00Z",
+            "endTime": "2024-01-15T10:00:02Z",
+            "timeToFirstToken": 500,
+        },
+        "provider": "custom",
+    },
+)
+```
+</CodeGroup>
+
+### Typed Custom Traces
+
+For better validation, use the typed endpoint:
+
+```typescript
+interface TypedCustomTrace {
+  providerRequest: {
+    url: string;
+    json: Record<string, any>;
+    meta?: Record<string, any>;
+  };
+  providerResponse: {
+    json: Record<string, any>;
+    textBody?: string;
+    status: number;
+    headers?: Record<string, string>;
+  };
+  timing?: {
+    startTime: string | Date;
+    endTime: string | Date;
+    timeToFirstToken?: number;
+  };
+  provider: string;
+}
+
+const response = await fetch("https://api.helicone.ai/v1/trace/custom/log/typed", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(traceData),
+});
+```
+
+## Trace Visualization
+
+Helicone provides rich visualization for all trace types:
+
+### Timeline View
+See the chronological flow of all operations in your trace with timing information.
+
+### Hierarchy View
+Understand parent-child relationships between spans and requests.
+
+### Performance Metrics
+- Total duration
+- Time to first token
+- Individual span durations
+- Token usage per step
+- Cost breakdown per operation
+
+### Filtering and Search
+Filter traces by:
+- Session name
+- Time range
+- Duration
+- Error status
+- Custom properties
+
+## Best Practices
+
+<AccordionGroup>
+<Accordion title="Choose the Right Trace Type">
+- **Sessions**: For simple LLM workflows and chatbots
+- **OTEL**: For complex multi-service distributed systems
+- **Custom**: For non-LLM operations and custom integrations
+</Accordion>
+
+<Accordion title="Add Meaningful Span Names">
+Use descriptive names that explain what each span does:
+
+```typescript
+// Good
+tracer.startActiveSpan('user-query-embedding')
+tracer.startActiveSpan('vector-database-search')
+tracer.startActiveSpan('llm-response-generation')
+
+// Avoid
+tracer.startActiveSpan('step1')
+tracer.startActiveSpan('operation')
+```
+</Accordion>
+
+<Accordion title="Include Context in Spans">
+Add attributes to spans for better debugging:
+
+```typescript
+span.setAttributes({
+  'user.id': userId,
+  'query.length': query.length,
+  'model.name': 'gpt-4o-mini',
+  'tokens.input': inputTokens,
+  'tokens.output': outputTokens,
+});
+```
+</Accordion>
+
+<Accordion title="Handle Errors Properly">
+Set error status on failed spans:
+
+```typescript
+try {
+  // Operation
+  span.setStatus({ code: SpanStatusCode.OK });
+} catch (error) {
+  span.setStatus({ 
+    code: SpanStatusCode.ERROR, 
+    message: error.message 
+  });
+  span.recordException(error);
+  throw error;
+} finally {
+  span.end();
+}
+```
+</Accordion>
+
+<Accordion title="Use Consistent Naming">
+Develop a naming convention for traces and spans:
+
+```typescript
+// Example convention: {service}.{operation}.{detail}
+'user-service.query.embedding'
+'search-service.vector.similarity'
+'llm-service.generate.response'
+```
+</Accordion>
+</AccordionGroup>
+
+## Common Patterns
+
+<Tabs>
+<Tab title="RAG Pipeline">
+Tracing a complete RAG workflow:
+
+```typescript
+import { trace } from '@opentelemetry/api';
+
+const tracer = trace.getTracer('rag-pipeline');
+
+async function ragQuery(userQuery: string) {
+  return await tracer.startActiveSpan('rag-query', async (parentSpan) => {
+    parentSpan.setAttribute('query', userQuery);
+    
+    // Step 1: Generate embedding
+    const embedding = await tracer.startActiveSpan(
+      'generate-embedding',
+      async (span) => {
+        const result = await openai.embeddings.create({
+          model: "text-embedding-3-small",
+          input: userQuery,
+        });
+        span.setAttribute('embedding.dimension', result.data[0].embedding.length);
+        span.end();
+        return result.data[0].embedding;
+      }
+    );
+    
+    // Step 2: Vector search
+    const docs = await tracer.startActiveSpan(
+      'vector-search',
+      async (span) => {
+        const results = await vectorDb.search(embedding, { limit: 5 });
+        span.setAttribute('results.count', results.length);
+        span.end();
+        return results;
+      }
+    );
+    
+    // Step 3: Generate response
+    const response = await tracer.startActiveSpan(
+      'llm-generation',
+      async (span) => {
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: "Answer based on context" },
+            { role: "user", content: `Context: ${docs}\n\nQuestion: ${userQuery}` }
+          ],
+        });
+        span.setAttribute('tokens.input', completion.usage?.prompt_tokens);
+        span.setAttribute('tokens.output', completion.usage?.completion_tokens);
+        span.end();
+        return completion.choices[0].message.content;
+      }
+    );
+    
+    parentSpan.end();
+    return response;
+  });
+}
+```
+</Tab>
+
+<Tab title="Multi-Service Agent">
+Tracing an agent that calls multiple services:
+
+```typescript
+async function agentWorkflow(task: string) {
+  return await tracer.startActiveSpan('agent-workflow', async (rootSpan) => {
+    rootSpan.setAttribute('task', task);
+    
+    // Service 1: Understanding service
+    const intent = await tracer.startActiveSpan('understanding-service', async (span) => {
+      const response = await fetch('https://understanding-service/analyze', {
+        method: 'POST',
+        body: JSON.stringify({ task }),
+      });
+      const data = await response.json();
+      span.setAttribute('intent', data.intent);
+      span.end();
+      return data;
+    });
+    
+    // Service 2: Tool selection
+    const tools = await tracer.startActiveSpan('tool-selection', async (span) => {
+      const response = await llm.selectTools(intent);
+      span.setAttribute('tools.count', response.tools.length);
+      span.end();
+      return response.tools;
+    });
+    
+    // Service 3: Execute tools in parallel
+    const results = await tracer.startActiveSpan('tool-execution', async (span) => {
+      const promises = tools.map((tool) =>
+        tracer.startActiveSpan(`execute-tool-${tool.name}`, async (toolSpan) => {
+          const result = await executeTool(tool);
+          toolSpan.end();
+          return result;
+        })
+      );
+      const allResults = await Promise.all(promises);
+      span.end();
+      return allResults;
+    });
+    
+    // Service 4: Synthesis
+    const finalResponse = await tracer.startActiveSpan('synthesis', async (span) => {
+      const response = await llm.synthesize(results);
+      span.end();
+      return response;
+    });
+    
+    rootSpan.end();
+    return finalResponse;
+  });
+}
+```
+</Tab>
+
+<Tab title="Error Tracking">
+Comprehensive error tracking in traces:
+
+```typescript
+async function tracedOperation() {
+  return await tracer.startActiveSpan('operation', async (span) => {
+    try {
+      span.setAttribute('operation.type', 'llm-call');
+      
+      const result = await openai.chat.completions.create({...});
+      
+      // Success metrics
+      span.setStatus({ code: SpanStatusCode.OK });
+      span.setAttribute('success', true);
+      span.setAttribute('tokens.used', result.usage.total_tokens);
+      
+      return result;
+      
+    } catch (error) {
+      // Error handling
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error.message,
+      });
+      
+      span.setAttribute('error.type', error.constructor.name);
+      span.setAttribute('error.message', error.message);
+      
+      if (error.status) {
+        span.setAttribute('http.status', error.status);
+      }
+      
+      span.recordException(error);
+      
+      throw error;
+      
+    } finally {
+      span.end();
+    }
+  });
+}
+```
+</Tab>
+</Tabs>
+
+## Comparing Trace Types
+
+| Feature | Sessions | OTEL | Custom |
+|---------|----------|------|--------|
+| Setup Complexity | Low | Medium | Low |
+| LLM Request Tracking | ✅ | ✅ | ✅ |
+| Non-LLM Operations | ❌ | ✅ | ✅ |
+| Multi-Service | Limited | ✅ | Manual |
+| Standard Protocol | ❌ | ✅ | ❌ |
+| Hierarchy Depth | Unlimited | Unlimited | Flat |
+| Best For | LLM workflows | Distributed systems | Custom integrations |
+
+## Related Features
+
+<CardGroup cols={2}>
+<Card title="Sessions" icon="diagram-project" href="/observability/sessions">
+Simple hierarchical tracing for LLM workflows
+</Card>
+
+<Card title="Requests" icon="message" href="/observability/requests">
+View individual requests within traces
+</Card>
+
+<Card title="Custom Properties" icon="tag" href="/observability/custom-properties">
+Add metadata to traces and spans
+</Card>
+
+<Card title="User Metrics" icon="users" href="/observability/user-metrics">
+Analyze user behavior across traces
+</Card>
+</CardGroup>
+
+<QuestionsSection />

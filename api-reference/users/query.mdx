@@ -1,0 +1,209 @@
+---
+title: 'Query Users'
+api: 'POST https://api.helicone.ai/v1/user/metrics/query'
+description: 'Query user metrics and usage statistics'
+---
+
+## Overview
+
+Retrieve detailed metrics for users including request counts, token usage, and costs.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Your Helicone API key. Format: `Bearer YOUR_API_KEY`
+</ParamField>
+
+## Request Body
+
+<ParamField body="filter" type="object" required>
+  Filter criteria for users (use `{}` for all)
+</ParamField>
+
+<ParamField body="offset" type="number" required>
+  Number of users to skip for pagination
+</ParamField>
+
+<ParamField body="limit" type="number" required>
+  Maximum number of users to return (max: 1000)
+</ParamField>
+
+<ParamField body="timeFilter" type="object">
+  Time range filter
+  
+  <Expandable title="time filter properties">
+    <ResponseField name="startTimeUnixSeconds" type="number">
+      Start time in Unix seconds
+    </ResponseField>
+    <ResponseField name="endTimeUnixSeconds" type="number">
+      End time in Unix seconds
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="timeZoneDifferenceMinutes" type="number">
+  Timezone offset in minutes from UTC
+</ParamField>
+
+<ParamField body="sort" type="object">
+  Sort order for results
+  
+  Example:
+  ```json
+  { "total_requests": "desc" }
+  ```
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="object">
+  User metrics response
+  
+  <Expandable title="response properties">
+    <ResponseField name="users" type="array">
+      Array of user metric objects
+      <Expandable title="user object">
+        <ResponseField name="id" type="string">
+          Internal user ID
+        </ResponseField>
+        <ResponseField name="user_id" type="string">
+          User identifier from requests
+        </ResponseField>
+        <ResponseField name="active_for" type="number">
+          Number of days active
+        </ResponseField>
+        <ResponseField name="first_active" type="string">
+          ISO 8601 timestamp of first request
+        </ResponseField>
+        <ResponseField name="last_active" type="string">
+          ISO 8601 timestamp of last request
+        </ResponseField>
+        <ResponseField name="total_requests" type="number">
+          Total number of requests
+        </ResponseField>
+        <ResponseField name="average_requests_per_day_active" type="number">
+          Average requests per active day
+        </ResponseField>
+        <ResponseField name="average_tokens_per_request" type="number">
+          Average tokens per request
+        </ResponseField>
+        <ResponseField name="total_completion_tokens" type="number">
+          Total completion tokens
+        </ResponseField>
+        <ResponseField name="total_prompt_tokens" type="number">
+          Total prompt tokens
+        </ResponseField>
+        <ResponseField name="cost" type="number">
+          Total cost in USD
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="count" type="number">
+      Total number of users matching filter
+    </ResponseField>
+    <ResponseField name="hasUsers" type="boolean">
+      Whether any users exist
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if request failed
+</ResponseField>
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.helicone.ai/v1/user/metrics/query \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "filter": {},
+    "offset": 0,
+    "limit": 50,
+    "sort": {
+      "total_requests": "desc"
+    }
+  }'
+```
+
+```python Python
+import requests
+
+url = "https://api.helicone.ai/v1/user/metrics/query"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json"
+}
+
+payload = {
+    "filter": {},
+    "offset": 0,
+    "limit": 50,
+    "sort": {
+        "total_requests": "desc"
+    }
+}
+
+response = requests.post(url, json=payload, headers=headers)
+data = response.json()
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.helicone.ai/v1/user/metrics/query', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    filter: {},
+    offset: 0,
+    limit: 50,
+    sort: {
+      total_requests: 'desc',
+    },
+  }),
+});
+
+const data = await response.json();
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200 Success
+{
+  "data": {
+    "users": [
+      {
+        "id": "int_user_123",
+        "user_id": "user_456",
+        "active_for": 30,
+        "first_active": "2024-02-01T00:00:00Z",
+        "last_active": "2024-03-02T14:30:00Z",
+        "total_requests": 1250,
+        "average_requests_per_day_active": 41.6,
+        "average_tokens_per_request": 245,
+        "total_completion_tokens": 150000,
+        "total_prompt_tokens": 156250,
+        "cost": 15.75
+      }
+    ],
+    "count": 1,
+    "hasUsers": true
+  },
+  "error": null
+}
+```
+
+```json 400 Error
+{
+  "data": null,
+  "error": "Limit cannot be greater than 1000"
+}
+```
+
+</ResponseExample>

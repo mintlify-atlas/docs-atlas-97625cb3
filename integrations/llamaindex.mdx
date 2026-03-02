@@ -1,0 +1,354 @@
+---
+title: "LlamaIndex Integration"
+sidebarTitle: "LlamaIndex"
+description: "Integrate Helicone with LlamaIndex to monitor RAG applications and vector store interactions"
+icon: "database"
+---
+
+## Introduction
+
+Helicone integrates seamlessly with LlamaIndex, providing comprehensive observability for your retrieval-augmented generation (RAG) applications. Track queries, embeddings, retrievals, and LLM calls with full request/response logging, cost tracking, and performance monitoring.
+
+<Note>
+  For new projects, consider using the [AI Gateway](/gateway/overview) with LlamaIndex for unified access to 100+ models.
+</Note>
+
+## Quick Start
+
+Integrate Helicone with LlamaIndex by configuring the base URL for your LLM and embedding models.
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    pip install llama-index llama-index-llms-openai llama-index-embeddings-openai python-dotenv
+    ```
+  </Step>
+
+  <Step title="Set environment variables">
+    ```bash
+    HELICONE_API_KEY=sk-helicone-...
+    OPENAI_API_KEY=sk-...
+    ```
+  </Step>
+
+  <Step title="Configure LlamaIndex with Helicone">
+    ```python
+    from llama_index.core import Settings
+    from llama_index.llms.openai import OpenAI
+    from llama_index.embeddings.openai import OpenAIEmbedding
+    from dotenv import load_dotenv
+    import os
+
+    load_dotenv()
+
+    helicone_api_key = os.getenv("HELICONE_API_KEY")
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+
+    # Configure LLM
+    Settings.llm = OpenAI(
+        model="gpt-4o",
+        api_key=openai_api_key,
+        api_base="https://oai.helicone.ai/v1",
+        default_headers={
+            "Helicone-Auth": f"Bearer {helicone_api_key}",
+        },
+    )
+
+    # Configure embeddings
+    Settings.embed_model = OpenAIEmbedding(
+        model="text-embedding-3-small",
+        api_key=openai_api_key,
+        api_base="https://oai.helicone.ai/v1",
+        additional_kwargs={
+            "headers": {
+                "Helicone-Auth": f"Bearer {helicone_api_key}",
+            }
+        },
+    )
+
+    # Now use LlamaIndex as normal
+    response = Settings.llm.complete("What is RAG?")
+    print(response.text)
+    ```
+  </Step>
+</Steps>
+
+## RAG Application Example
+
+Build a complete RAG application with Helicone tracking:
+
+```python
+from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Settings
+from llama_index.llms.openai import OpenAI
+from llama_index.embeddings.openai import OpenAIEmbedding
+import os
+
+# Configure Helicone
+helicone_api_key = os.getenv("HELICONE_API_KEY")
+openai_api_key = os.getenv("OPENAI_API_KEY")
+
+Settings.llm = OpenAI(
+    model="gpt-4o",
+    api_key=openai_api_key,
+    api_base="https://oai.helicone.ai/v1",
+    default_headers={
+        "Helicone-Auth": f"Bearer {helicone_api_key}",
+        "Helicone-Property-Type": "rag-generation",
+    },
+)
+
+Settings.embed_model = OpenAIEmbedding(
+    model="text-embedding-3-small",
+    api_key=openai_api_key,
+    api_base="https://oai.helicone.ai/v1",
+    additional_kwargs={
+        "headers": {
+            "Helicone-Auth": f"Bearer {helicone_api_key}",
+            "Helicone-Property-Type": "rag-embeddings",
+        }
+    },
+)
+
+# Load documents
+documents = SimpleDirectoryReader("data").load_data()
+
+# Create index
+index = VectorStoreIndex.from_documents(documents)
+
+# Create query engine
+query_engine = index.as_query_engine()
+
+# Query the index
+response = query_engine.query("What is the main topic of these documents?")
+print(response)
+```
+
+## Advanced Features
+
+### Custom Properties
+
+Add metadata to track different parts of your RAG pipeline:
+
+```python
+from llama_index.core import Settings
+from llama_index.llms.openai import OpenAI
+import os
+
+Settings.llm = OpenAI(
+    model="gpt-4o",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    api_base="https://oai.helicone.ai/v1",
+    default_headers={
+        "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+        "Helicone-Property-Application": "document-qa",
+        "Helicone-Property-Environment": "production",
+        "Helicone-Property-Version": "v1.2.0",
+        "Helicone-Property-Index-Type": "vector-store",
+    },
+)
+```
+
+### Session Tracking
+
+Track related queries as sessions:
+
+```python
+from llama_index.core import VectorStoreIndex, Settings
+from llama_index.llms.openai import OpenAI
+import os
+import uuid
+
+# Generate session ID for this conversation
+session_id = str(uuid.uuid4())
+
+Settings.llm = OpenAI(
+    model="gpt-4o",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    api_base="https://oai.helicone.ai/v1",
+    default_headers={
+        "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+        "Helicone-Session-Id": session_id,
+        "Helicone-Session-Name": "Document Q&A Session",
+        "Helicone-User-Id": "user-123",
+    },
+)
+
+# All queries in this session will be tracked together
+query_engine = index.as_query_engine()
+response1 = query_engine.query("What is the document about?")
+response2 = query_engine.query("Can you elaborate on that?")
+```
+
+### Multi-Index Applications
+
+Track queries across different indices:
+
+```python
+from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Settings
+from llama_index.llms.openai import OpenAI
+import os
+
+# Load different document sets
+tech_docs = SimpleDirectoryReader("tech").load_data()
+business_docs = SimpleDirectoryReader("business").load_data()
+
+# Create indices
+tech_index = VectorStoreIndex.from_documents(tech_docs)
+business_index = VectorStoreIndex.from_documents(business_docs)
+
+# Query tech index
+Settings.llm.default_headers.update({
+    "Helicone-Property-Index": "tech-docs",
+})
+tech_response = tech_index.as_query_engine().query("Explain the API")
+
+# Query business index
+Settings.llm.default_headers.update({
+    "Helicone-Property-Index": "business-docs",
+})
+business_response = business_index.as_query_engine().query("What is the revenue model?")
+```
+
+### Agents with Tools
+
+Track agent interactions and tool usage:
+
+```python
+from llama_index.core.agent import ReActAgent
+from llama_index.core.tools import QueryEngineTool, ToolMetadata
+from llama_index.core import VectorStoreIndex, Settings
+from llama_index.llms.openai import OpenAI
+import os
+
+Settings.llm = OpenAI(
+    model="gpt-4o",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    api_base="https://oai.helicone.ai/v1",
+    default_headers={
+        "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+        "Helicone-Property-Type": "agent",
+    },
+)
+
+# Create query tools
+index1 = VectorStoreIndex.from_documents(documents1)
+index2 = VectorStoreIndex.from_documents(documents2)
+
+query_tool1 = QueryEngineTool(
+    query_engine=index1.as_query_engine(),
+    metadata=ToolMetadata(
+        name="technical_docs",
+        description="Technical documentation and API references",
+    ),
+)
+
+query_tool2 = QueryEngineTool(
+    query_engine=index2.as_query_engine(),
+    metadata=ToolMetadata(
+        name="user_guides",
+        description="User guides and tutorials",
+    ),
+)
+
+# Create agent
+agent = ReActAgent.from_tools(
+    tools=[query_tool1, query_tool2],
+    verbose=True,
+)
+
+# Query agent
+response = agent.chat("How do I authenticate with the API?")
+print(response)
+```
+
+### Chat Engine
+
+Track conversational RAG applications:
+
+```python
+from llama_index.core import VectorStoreIndex, Settings
+from llama_index.llms.openai import OpenAI
+import os
+import uuid
+
+session_id = str(uuid.uuid4())
+
+Settings.llm = OpenAI(
+    model="gpt-4o",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    api_base="https://oai.helicone.ai/v1",
+    default_headers={
+        "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+        "Helicone-Session-Id": session_id,
+        "Helicone-Session-Name": "Chat Engine",
+        "Helicone-Property-Type": "chat-engine",
+    },
+)
+
+# Create chat engine
+index = VectorStoreIndex.from_documents(documents)
+chat_engine = index.as_chat_engine(chat_mode="condense_question")
+
+# Multi-turn conversation
+response1 = chat_engine.chat("What is this document about?")
+print(response1)
+
+response2 = chat_engine.chat("Can you give me more details?")
+print(response2)
+```
+
+## Using with Anthropic
+
+Configure LlamaIndex to use Anthropic models:
+
+```python
+from llama_index.core import Settings
+from llama_index.llms.anthropic import Anthropic
+import os
+
+Settings.llm = Anthropic(
+    model="claude-3-5-sonnet-20241022",
+    api_key=os.getenv("ANTHROPIC_API_KEY"),
+    api_base="https://anthropic.helicone.ai",
+    additional_kwargs={
+        "headers": {
+            "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+        }
+    },
+)
+
+response = Settings.llm.complete("Explain RAG in simple terms")
+print(response.text)
+```
+
+## Monitoring and Analytics
+
+Once integrated, view your LlamaIndex usage in the Helicone dashboard:
+
+- **Query logs** - Track all RAG queries with context and responses
+- **Embedding tracking** - Monitor embedding generation costs and performance
+- **Cost tracking** - Separate costs for retrieval vs. generation
+- **Latency metrics** - Measure retrieval and generation times
+- **Agent traces** - Visualize agent tool usage and decision-making
+- **Session analytics** - Track conversation patterns
+
+<Card title="View Dashboard" icon="chart-line" href="https://us.helicone.ai/dashboard">
+  Monitor your LlamaIndex usage in real-time
+</Card>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="AI Gateway" icon="arrow-progress" href="/gateway/overview">
+    Use the unified API for 100+ models
+  </Card>
+  <Card title="Sessions" icon="link" href="/observability/sessions">
+    Track multi-turn conversations
+  </Card>
+  <Card title="Custom Properties" icon="tags" href="/observability/custom-properties">
+    Add metadata to your requests
+  </Card>
+  <Card title="Cost Tracking" icon="dollar-sign" href="/observability/cost-tracking">
+    Monitor RAG pipeline costs
+  </Card>
+</CardGroup>

@@ -1,0 +1,236 @@
+---
+title: 'Query Requests'
+api: 'POST https://api.helicone.ai/v1/request/query'
+description: 'Query and filter your logged requests with advanced filtering capabilities'
+---
+
+## Overview
+
+Retrieve requests from your Helicone account with flexible filtering, sorting, and pagination.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Your Helicone API key. Format: `Bearer YOUR_API_KEY`
+</ParamField>
+
+## Request Body
+
+<ParamField body="filter" type="object" required>
+  Filter criteria for requests. Use `{}` for all requests or specify filter conditions.
+  
+  <Expandable title="filter examples">
+    <ResponseField name="request.model" type="object">
+      Filter by model name
+      ```json
+      { "request": { "model": { "equals": "gpt-4" } } }
+      ```
+    </ResponseField>
+    <ResponseField name="request.user_id" type="object">
+      Filter by user ID
+      ```json
+      { "request": { "user_id": { "equals": "user_123" } } }
+      ```
+    </ResponseField>
+    <ResponseField name="request.created_at" type="object">
+      Filter by date range
+      ```json
+      { "request": { "created_at": { "gte": "2024-01-01" } } }
+      ```
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="offset" type="number" default="0">
+  Number of requests to skip for pagination
+</ParamField>
+
+<ParamField body="limit" type="number" default="10">
+  Maximum number of requests to return (max: 100)
+</ParamField>
+
+<ParamField body="sort" type="object">
+  Sort order for results
+  ```json
+  { "created_at": "desc" }
+  ```
+</ParamField>
+
+<ParamField body="isCached" type="boolean">
+  Filter for cached requests only
+</ParamField>
+
+<ParamField body="includeInputs" type="boolean" default="false">
+  Include prompt inputs in response
+</ParamField>
+
+<ParamField body="isPartOfExperiment" type="boolean">
+  Filter for experiment requests
+</ParamField>
+
+<ParamField body="isScored" type="boolean">
+  Filter for requests with scores
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="array">
+  Array of request objects
+  
+  <Expandable title="request object">
+    <ResponseField name="request_id" type="string">
+      Unique request identifier
+    </ResponseField>
+    <ResponseField name="model" type="string">
+      Model used for the request
+    </ResponseField>
+    <ResponseField name="provider" type="string">
+      Provider (e.g., OPENAI, ANTHROPIC)
+    </ResponseField>
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    <ResponseField name="user_id" type="string">
+      User identifier
+    </ResponseField>
+    <ResponseField name="prompt_tokens" type="number">
+      Number of input tokens
+    </ResponseField>
+    <ResponseField name="completion_tokens" type="number">
+      Number of output tokens
+    </ResponseField>
+    <ResponseField name="total_tokens" type="number">
+      Total tokens used
+    </ResponseField>
+    <ResponseField name="cost" type="number">
+      Request cost in USD
+    </ResponseField>
+    <ResponseField name="latency" type="number">
+      Response latency in milliseconds
+    </ResponseField>
+    <ResponseField name="status" type="number">
+      HTTP status code
+    </ResponseField>
+    <ResponseField name="properties" type="object">
+      Custom properties attached to request
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if request failed
+</ResponseField>
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.helicone.ai/v1/request/query \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "filter": {
+      "request": {
+        "model": {
+          "equals": "gpt-4"
+        }
+      }
+    },
+    "offset": 0,
+    "limit": 10,
+    "sort": {
+      "created_at": "desc"
+    }
+  }'
+```
+
+```python Python
+import requests
+
+url = "https://api.helicone.ai/v1/request/query"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json"
+}
+
+payload = {
+    "filter": {
+        "request": {
+            "model": {
+                "equals": "gpt-4"
+            }
+        }
+    },
+    "offset": 0,
+    "limit": 10,
+    "sort": {
+        "created_at": "desc"
+    }
+}
+
+response = requests.post(url, json=payload, headers=headers)
+data = response.json()
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.helicone.ai/v1/request/query', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    filter: {
+      request: {
+        model: {
+          equals: 'gpt-4',
+        },
+      },
+    },
+    offset: 0,
+    limit: 10,
+    sort: {
+      created_at: 'desc',
+    },
+  }),
+});
+
+const data = await response.json();
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200 Success
+{
+  "data": [
+    {
+      "request_id": "req_abc123",
+      "model": "gpt-4",
+      "provider": "OPENAI",
+      "created_at": "2024-03-02T10:30:00Z",
+      "user_id": "user_456",
+      "prompt_tokens": 150,
+      "completion_tokens": 75,
+      "total_tokens": 225,
+      "cost": 0.0045,
+      "latency": 1250,
+      "status": 200,
+      "properties": {
+        "environment": "production"
+      }
+    }
+  ],
+  "error": null
+}
+```
+
+```json 500 Error
+{
+  "data": null,
+  "error": "Failed to query requests"
+}
+```
+
+</ResponseExample>

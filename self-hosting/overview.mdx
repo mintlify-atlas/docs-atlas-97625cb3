@@ -1,0 +1,136 @@
+---
+title: Self-Hosting Overview
+description: Deploy Helicone in your own infrastructure for complete data control and privacy
+---
+
+Helicone can be self-hosted in your own infrastructure, giving you complete control over your data and deployment environment. This is ideal for organizations with strict data governance requirements or those who want to customize their deployment.
+
+## Why Self-Host?
+
+<CardGroup cols={2}>
+  <Card title="Data Privacy" icon="shield">
+    Keep all your LLM requests, responses, and analytics data within your own infrastructure
+  </Card>
+  <Card title="Customization" icon="wrench">
+    Modify and extend Helicone to meet your specific requirements
+  </Card>
+  <Card title="Cost Control" icon="dollar-sign">
+    No usage-based pricing - pay only for your infrastructure costs
+  </Card>
+  <Card title="Compliance" icon="check">
+    Meet regulatory requirements by hosting in specific regions or on-premises
+  </Card>
+</CardGroup>
+
+## Architecture Components
+
+Helicone consists of five core services:
+
+<AccordionGroup>
+  <Accordion title="Web - Frontend Platform" icon="desktop">
+    The NextJS-based dashboard for visualizing requests, managing prompts, and analyzing your LLM usage. Provides the user interface for all Helicone features.
+  </Accordion>
+
+  <Accordion title="Jawn - API Server" icon="server">
+    Express + Tsoa-based API server that handles log collection, request processing, and serves the REST API. This is the core backend service.
+  </Accordion>
+
+  <Accordion title="Worker - Proxy Service" icon="network-wired">
+    Cloudflare Workers-based proxy that intercepts and logs LLM requests. Can run as OpenAI Proxy, Anthropic Proxy, or Helicone API.
+  </Accordion>
+
+  <Accordion title="PostgreSQL - Application Database" icon="database">
+    Stores user data, authentication, organization settings, and application state. Can use your own PostgreSQL instance or Supabase.
+  </Accordion>
+
+  <Accordion title="ClickHouse - Analytics Database" icon="chart-line">
+    High-performance columnar database for storing and analyzing request logs, metrics, and time-series data.
+  </Accordion>
+
+  <Accordion title="MinIO - Object Storage" icon="box">
+    S3-compatible storage for request/response bodies and prompt storage. Can be replaced with AWS S3 or compatible services.
+  </Accordion>
+</AccordionGroup>
+
+## Deployment Options
+
+<CardGroup cols={3}>
+  <Card title="Docker" icon="docker" href="/self-hosting/docker">
+    Quick setup using Docker Compose for development or small deployments
+  </Card>
+  <Card title="Kubernetes" icon="kubernetes" href="/self-hosting/kubernetes">
+    Production-ready Helm chart for scalable enterprise deployments
+  </Card>
+  <Card title="All-in-One Container" icon="cube">
+    Single container with all services for simple deployments
+  </Card>
+</CardGroup>
+
+## Quick Start
+
+The fastest way to try self-hosted Helicone is with Docker:
+
+```bash
+git clone https://github.com/Helicone/helicone.git
+cd helicone/docker
+cp .env.example .env
+./helicone-compose.sh helicone up
+```
+
+Access the dashboard at `http://localhost:3000`
+
+<Note>
+  For production deployments, see our detailed [Docker](/self-hosting/docker) and [Kubernetes](/self-hosting/kubernetes) guides.
+</Note>
+
+## System Requirements
+
+### Minimum (Development)
+- **CPU**: 4 cores
+- **RAM**: 8GB
+- **Storage**: 20GB SSD
+- **OS**: Linux, macOS, or Windows with Docker
+
+### Recommended (Production)
+- **CPU**: 8+ cores
+- **RAM**: 16GB+
+- **Storage**: 100GB+ SSD (for ClickHouse)
+- **Network**: Low latency connection to your LLM providers
+
+## Default Ports
+
+When running all services:
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Web Dashboard | 3000 | NextJS frontend |
+| Jawn API | 8585 | Backend API and LLM proxy |
+| PostgreSQL | 54388 | Application database |
+| ClickHouse HTTP | 18123 | Analytics database HTTP interface |
+| ClickHouse Native | 19000 | Analytics database native interface |
+| MinIO API | 9000 | S3-compatible storage |
+| MinIO Console | 9001 | MinIO admin interface |
+| MailHog SMTP | 1025 | Email testing (dev only) |
+| MailHog Web | 8025 | Email testing UI (dev only) |
+
+## Enterprise Support
+
+For production Kubernetes deployments, Helicone offers:
+
+- **Production-ready Helm Chart**: Enterprise-grade deployment configuration
+- **Migration assistance**: Help moving from cloud to self-hosted
+- **Custom integrations**: Integrate with your existing infrastructure
+- **Priority support**: Direct access to the Helicone team
+
+Contact us at [enterprise@helicone.ai](mailto:enterprise@helicone.ai) for access to enterprise features.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Docker Deployment" icon="docker" href="/self-hosting/docker">
+    Set up Helicone with Docker Compose
+  </Card>
+  <Card title="Configuration" icon="gear" href="/self-hosting/configuration">
+    Configure environment variables and services
+  </Card>
+</CardGroup>

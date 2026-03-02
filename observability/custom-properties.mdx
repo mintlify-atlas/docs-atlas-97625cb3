@@ -1,0 +1,784 @@
+---
+title: "Custom Properties"
+sidebarTitle: "Custom Properties"
+description: "Add custom metadata to requests for powerful filtering, segmentation, and analysis"
+"twitter:title": "Custom Properties - Helicone OSS LLM Observability"
+---
+
+import QuestionsSection from "/snippets/questions-section.mdx";
+
+## Overview
+
+Custom properties are key-value pairs that you can attach to any request in Helicone. They enable powerful filtering, segmentation, and analysis of your LLM data by letting you tag requests with business-specific metadata like user IDs, feature names, environments, and more.
+
+## Why Use Custom Properties
+
+<CardGroup cols={2}>
+<Card title="Filter & Segment" icon="filter">
+Filter requests by any property to analyze specific subsets of your data
+</Card>
+
+<Card title="Track by User" icon="user">
+Associate requests with user IDs to analyze per-user behavior and costs
+</Card>
+
+<Card title="Organize by Feature" icon="layer-group">
+Tag requests by feature or workflow to measure feature usage and performance
+</Card>
+
+<Card title="Separate Environments" icon="code-branch">
+Differentiate between production, staging, and development requests
+</Card>
+</CardGroup>
+
+## Adding Properties
+
+### Inline Properties (Recommended)
+
+Add properties when making your LLM request by including special headers:
+
+<CodeGroup>
+```typescript Node.js (Proxy)
+import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+const response = await client.chat.completions.create(
+  {
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Hello!" }],
+  },
+  {
+    headers: {
+      "Helicone-Property-Environment": "production",
+      "Helicone-Property-User-Id": "user_123",
+      "Helicone-Property-Feature": "chat",
+      "Helicone-Property-Conversation-Id": "conv_456",
+    },
+  }
+);
+```
+
+```python Python (Proxy)
+from openai import OpenAI
+import os
+
+client = OpenAI(
+    api_key=os.environ.get("OPENAI_API_KEY"),
+    base_url="https://oai.helicone.ai/v1",
+    default_headers={
+        "Helicone-Auth": f"Bearer {os.environ.get('HELICONE_API_KEY')}",
+    },
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Hello!"}],
+    extra_headers={
+        "Helicone-Property-Environment": "production",
+        "Helicone-Property-User-Id": "user_123",
+        "Helicone-Property-Feature": "chat",
+        "Helicone-Property-Conversation-Id": "conv_456",
+    },
+)
+```
+
+```typescript Node.js (SDK)
+import { hpf } from "@helicone/prompts";
+
+const chatCompletion = await client.chat.completions.create(
+  {
+    messages: [
+      {
+        role: "user",
+        content: hpf`Write a story about ${{"animal": "dog"}}`
+      },
+    ],
+    model: "gpt-4o-mini",
+  },
+  {
+    properties: {
+      "Environment": "production",
+      "User-Id": "user_123",
+      "Feature": "story_generation",
+    },
+  }
+);
+```
+</CodeGroup>
+
+### Property Naming Convention
+
+Use the header format: `Helicone-Property-{Key}`
+
+- The header name is `Helicone-Property-` followed by your property key
+- Property keys are case-sensitive
+- Use hyphens or underscores for multi-word keys
+- The header value becomes the property value
+
+```typescript
+// These create different properties:
+"Helicone-Property-User-Id": "user_123"     // Property: User-Id
+"Helicone-Property-user-id": "user_123"     // Property: user-id  
+"Helicone-Property-UserId": "user_123"       // Property: UserId
+```
+
+### Add Properties After Request
+
+You can also add or update properties on existing requests using the API:
+
+<CodeGroup>
+```typescript Node.js
+const response = await fetch(
+  `https://api.helicone.ai/v1/request/${requestId}/property`,
+  {
+    method: "PUT",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      key: "quality_score",
+      value: "high",
+    }),
+  }
+);
+```
+
+```python Python
+import requests
+import os
+
+response = requests.put(
+    f"https://api.helicone.ai/v1/request/{request_id}/property",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('HELICONE_API_KEY')}",
+        "Content-Type": "application/json",
+    },
+    json={
+        "key": "quality_score",
+        "value": "high",
+    },
+)
+```
+
+```bash cURL
+curl -X PUT https://api.helicone.ai/v1/request/{requestId}/property \
+  -H "Authorization: Bearer $HELICONE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "quality_score",
+    "value": "high"
+  }'
+```
+</CodeGroup>
+
+## Common Property Patterns
+
+### User Identification
+
+Track requests by user for per-user analytics:
+
+```typescript
+headers: {
+  "Helicone-Property-User-Id": userId,
+  "Helicone-Property-User-Email": userEmail,
+  "Helicone-Property-User-Tier": "premium",
+  "Helicone-Property-Organization-Id": organizationId,
+}
+```
+
+<Note>
+Also set `Helicone-User-Id` header to populate the dedicated user field for user metrics.
+</Note>
+
+### Environment Tagging
+
+Separate production, staging, and development requests:
+
+```typescript
+headers: {
+  "Helicone-Property-Environment": process.env.NODE_ENV, // "production", "staging", "development"
+  "Helicone-Property-Deployment": deploymentId,
+  "Helicone-Property-Version": appVersion,
+}
+```
+
+### Feature Tracking
+
+Organize requests by feature or workflow:
+
+```typescript
+headers: {
+  "Helicone-Property-Feature": "chat",
+  "Helicone-Property-Workflow": "customer_support",
+  "Helicone-Property-Intent": "question_answering",
+}
+```
+
+### Business Context
+
+Add business-specific metadata:
+
+```typescript
+headers: {
+  "Helicone-Property-Customer-Id": customerId,
+  "Helicone-Property-Plan-Type": "enterprise",
+  "Helicone-Property-Region": "us-east",
+  "Helicone-Property-Campaign": "summer-2024",
+}
+```
+
+### Conversation Context
+
+Track multi-turn conversations:
+
+```typescript
+headers: {
+  "Helicone-Property-Conversation-Id": conversationId,
+  "Helicone-Property-Turn-Number": "3",
+  "Helicone-Property-Message-Type": "question",
+}
+```
+
+### Quality & Debugging
+
+Add metadata for quality tracking:
+
+```typescript
+headers: {
+  "Helicone-Property-Experiment-Id": experimentId,
+  "Helicone-Property-Variant": "control",
+  "Helicone-Property-Debug-Mode": "true",
+  "Helicone-Property-Source": "api",
+}
+```
+
+## Filtering by Properties
+
+### In the Dashboard
+
+1. Navigate to the **Requests** page
+2. Click **Add Filter**
+3. Select **Properties**
+4. Choose your property key and operator
+5. Enter the value to filter by
+
+```
+Property: "Environment" equals "production"
+Property: "User-Id" equals "user_123"
+Property: "Feature" contains "chat"
+```
+
+### Via API
+
+<CodeGroup>
+```typescript Node.js
+const response = await fetch("https://api.helicone.ai/v1/request/query", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    filter: {
+      request_response_rmt: {
+        properties: {
+          "Environment": {
+            equals: "production",
+          },
+        },
+      },
+    },
+    limit: 100,
+  }),
+});
+
+const { data } = await response.json();
+```
+
+```python Python
+import requests
+import os
+
+response = requests.post(
+    "https://api.helicone.ai/v1/request/query",
+    headers={
+        "Authorization": f"Bearer {os.environ.get('HELICONE_API_KEY')}",
+        "Content-Type": "application/json",
+    },
+    json={
+        "filter": {
+            "request_response_rmt": {
+                "properties": {
+                    "Environment": {
+                        "equals": "production",
+                    },
+                },
+            },
+        },
+        "limit": 100,
+    },
+)
+
+data = response.json()["data"]
+```
+</CodeGroup>
+
+### Filter Operators
+
+```typescript
+// Exact match
+properties: {
+  "User-Id": { equals: "user_123" }
+}
+
+// Contains substring
+properties: {
+  "Feature": { contains: "chat" }
+}
+
+// Case-insensitive contains
+properties: {
+  "Feature": { ilike: "%CHAT%" }
+}
+
+// Not equals
+properties: {
+  "Environment": { not_equals: "development" }
+}
+
+// Multiple properties (AND)
+properties: {
+  "Environment": { equals: "production" },
+  "Feature": { equals: "chat" }
+}
+```
+
+## Querying Properties
+
+### Get All Property Keys
+
+Retrieve all property keys for your organization:
+
+```typescript
+const response = await fetch("https://api.helicone.ai/v1/property/query", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({}),
+});
+
+const { data } = await response.json();
+// Returns: [{ property: "Environment" }, { property: "User-Id" }, ...]
+```
+
+### Search Property Values
+
+Find all possible values for a specific property:
+
+```typescript
+const response = await fetch(
+  `https://api.helicone.ai/v1/property/Environment/search`,
+  {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      searchTerm: "prod", // Search for values containing "prod"
+    }),
+  }
+);
+
+const { data } = await response.json();
+// Returns: ["production", "prod-us", "prod-eu", ...]
+```
+
+### Property-Based Analytics
+
+Get metrics grouped by property value:
+
+```typescript
+const response = await fetch(
+  "https://api.helicone.ai/v1/property/properties/over-time",
+  {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      propertyKey: "Feature",
+      timeFilter: {
+        start: "2024-01-01T00:00:00Z",
+        end: "2024-01-31T23:59:59Z",
+      },
+      dbIncrement: "day",
+      timeZoneDifference: 0,
+      userFilter: "all",
+    }),
+  }
+);
+
+const { data } = await response.json();
+// Returns cost and request count per property value over time
+```
+
+## Hiding Properties
+
+Hide sensitive or unused properties from the dashboard:
+
+### Hide a Property
+
+```typescript
+const response = await fetch("https://api.helicone.ai/v1/property/hide", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    key: "Internal-Debug-Id",
+  }),
+});
+```
+
+### Restore a Hidden Property
+
+```typescript
+const response = await fetch("https://api.helicone.ai/v1/property/restore", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    key: "Internal-Debug-Id",
+  }),
+});
+```
+
+### List Hidden Properties
+
+```typescript
+const response = await fetch("https://api.helicone.ai/v1/property/hidden/query", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+const { data } = await response.json();
+```
+
+## Best Practices
+
+<AccordionGroup>
+<Accordion title="Use Consistent Property Keys">
+Develop a standard set of property keys across your application:
+
+```typescript
+// Good - consistent naming
+const PROPERTIES = {
+  USER_ID: "User-Id",
+  ENVIRONMENT: "Environment",
+  FEATURE: "Feature",
+  VERSION: "Version",
+} as const;
+
+headers: {
+  [`Helicone-Property-${PROPERTIES.USER_ID}`]: userId,
+  [`Helicone-Property-${PROPERTIES.ENVIRONMENT}`]: env,
+}
+
+// Avoid - inconsistent naming
+"Helicone-Property-user": userId,        // sometimes "user"
+"Helicone-Property-User-Id": userId,     // sometimes "User-Id"
+"Helicone-Property-userId": userId,      // sometimes "userId"
+```
+</Accordion>
+
+<Accordion title="Keep Property Values Clean">
+Use clean, consistent values that are easy to filter:
+
+```typescript
+// Good
+"Helicone-Property-Environment": "production"  // lowercase, consistent
+"Helicone-Property-Feature": "chat"           // simple, clear
+
+// Avoid
+"Helicone-Property-Environment": "PRODUCTION (us-east-1) [v2.3]"  // too complex
+"Helicone-Property-Feature": userId + "_chat_" + timestamp       // dynamic, unfilterable
+```
+</Accordion>
+
+<Accordion title="Don't Overuse Properties">
+Only add properties that you'll use for filtering or analysis:
+
+```typescript
+// Good - useful for filtering
+"Helicone-Property-User-Id": userId,
+"Helicone-Property-Environment": environment,
+
+// Avoid - not useful for filtering
+"Helicone-Property-Timestamp": Date.now().toString(),  // Already tracked
+"Helicone-Property-Random-Id": randomUUID(),           // Unique every time
+"Helicone-Property-Request-Body": JSON.stringify(body), // Too large
+```
+</Accordion>
+
+<Accordion title="Use Properties for Segmentation">
+Add properties that let you segment your data meaningfully:
+
+```typescript
+headers: {
+  "Helicone-Property-User-Tier": "enterprise",      // Segment by customer tier
+  "Helicone-Property-Region": "us-east",            // Segment by region
+  "Helicone-Property-Feature": "chat",              // Segment by feature
+  "Helicone-Property-Experiment": "variant-a",      // Segment by experiment
+}
+```
+</Accordion>
+
+<Accordion title="Combine with User ID Header">
+When tracking users, set both the property and the dedicated user header:
+
+```typescript
+headers: {
+  "Helicone-User-Id": userId,              // Dedicated user field
+  "Helicone-Property-User-Id": userId,     // Also as property for filtering
+  "Helicone-Property-User-Email": email,   // Additional user context
+}
+```
+</Accordion>
+</AccordionGroup>
+
+## Common Use Cases
+
+<Tabs>
+<Tab title="Multi-Tenant Application">
+**Scenario**: Track usage and costs per customer organization.
+
+```typescript
+import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+async function chatCompletion(message: string, user: User, organization: Organization) {
+  const response = await client.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: message }],
+    },
+    {
+      headers: {
+        "Helicone-User-Id": user.id,
+        "Helicone-Property-User-Id": user.id,
+        "Helicone-Property-User-Email": user.email,
+        "Helicone-Property-Organization-Id": organization.id,
+        "Helicone-Property-Organization-Name": organization.name,
+        "Helicone-Property-Plan-Type": organization.plan,
+        "Helicone-Property-Environment": process.env.NODE_ENV,
+      },
+    }
+  );
+  
+  return response;
+}
+
+// Later, analyze costs per organization:
+// Filter by: Property "Organization-Id" equals "org_123"
+```
+</Tab>
+
+<Tab title="A/B Testing">
+**Scenario**: Compare performance across different prompt variants.
+
+```typescript
+import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+async function generateContent(topic: string, userId: string) {
+  // Randomly assign variant
+  const variant = Math.random() < 0.5 ? "control" : "variant-a";
+  
+  const prompts = {
+    control: `Write a blog post about ${topic}`,
+    "variant-a": `Create an engaging blog post about ${topic} with examples`,
+  };
+  
+  const response = await client.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompts[variant] }],
+    },
+    {
+      headers: {
+        "Helicone-Property-Experiment": "blog-prompt-test",
+        "Helicone-Property-Variant": variant,
+        "Helicone-Property-User-Id": userId,
+      },
+    }
+  );
+  
+  return { response, variant };
+}
+
+// Later, compare variants:
+// Filter by: Property "Experiment" equals "blog-prompt-test"
+// Group by: Property "Variant"
+```
+</Tab>
+
+<Tab title="Feature Usage Tracking">
+**Scenario**: Track which features users are using most.
+
+```typescript
+import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+const features = {
+  chat: "chat",
+  summarize: "summarize",
+  translate: "translate",
+  codeReview: "code_review",
+} as const;
+
+async function executeFeature(
+  feature: keyof typeof features,
+  input: string,
+  userId: string
+) {
+  const response = await client.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: input }],
+    },
+    {
+      headers: {
+        "Helicone-Property-Feature": features[feature],
+        "Helicone-Property-User-Id": userId,
+        "Helicone-Property-Environment": process.env.NODE_ENV,
+      },
+    }
+  );
+  
+  return response;
+}
+
+// Later, analyze feature usage:
+// Query property analytics grouped by "Feature"
+// See request counts and costs per feature
+```
+</Tab>
+
+<Tab title="Quality Monitoring">
+**Scenario**: Track quality scores and feedback by environment.
+
+```typescript
+import { OpenAI } from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://oai.helicone.ai/v1",
+  defaultHeaders: {
+    "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+  },
+});
+
+async function generateResponse(query: string, userId: string) {
+  // Make request with properties
+  const response = await client.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: query }],
+    },
+    {
+      headers: {
+        "Helicone-Property-Environment": process.env.NODE_ENV,
+        "Helicone-Property-User-Id": userId,
+        "Helicone-Property-Feature": "qa",
+      },
+    }
+  );
+  
+  // Later, add quality score
+  const requestId = response.id; // Get from response headers
+  const qualityScore = await evaluateQuality(response.choices[0].message.content);
+  
+  await fetch(
+    `https://api.helicone.ai/v1/request/${requestId}/property`,
+    {
+      method: "PUT",
+      headers: {
+        "Authorization": `Bearer ${process.env.HELICONE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        key: "quality_score",
+        value: qualityScore.toFixed(2),
+      }),
+    }
+  );
+  
+  return response;
+}
+
+// Later, filter by quality:
+// Property "quality_score" greater than "0.8"
+// Property "Environment" equals "production"
+```
+</Tab>
+</Tabs>
+
+## Related Features
+
+<CardGroup cols={2}>
+<Card title="Requests" icon="message" href="/observability/requests">
+View and filter requests using custom properties
+</Card>
+
+<Card title="User Metrics" icon="users" href="/observability/user-metrics">
+Analyze per-user metrics using User-Id properties
+</Card>
+
+<Card title="Sessions" icon="diagram-project" href="/observability/sessions">
+Combine properties with session tracking
+</Card>
+
+<Card title="Cost Tracking" icon="dollar-sign" href="/observability/cost-tracking">
+Analyze costs segmented by properties
+</Card>
+</CardGroup>
+
+<QuestionsSection />

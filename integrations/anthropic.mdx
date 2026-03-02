@@ -1,0 +1,377 @@
+---
+title: "Anthropic Integration"
+sidebarTitle: "Anthropic"
+description: "Integrate Helicone with Anthropic to monitor Claude models with full observability"
+icon: "message-bot"
+---
+
+## Introduction
+
+Helicone provides comprehensive observability for Anthropic's Claude models, including Claude 3 Opus, Sonnet, and Haiku, as well as Claude 2 and earlier versions.
+
+<Note>
+  For new projects, we recommend using the [AI Gateway](/gateway/overview) for unified access to 100+ models including Anthropic.
+</Note>
+
+## Quick Start
+
+Integrate Helicone with Anthropic by changing the base URL and adding a header.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    <Steps>
+      <Step title="Install Anthropic SDK">
+        ```bash
+        npm install @anthropic-ai/sdk
+        ```
+      </Step>
+
+      <Step title="Set environment variables">
+        ```bash
+        HELICONE_API_KEY=sk-helicone-...
+        ANTHROPIC_API_KEY=sk-ant-...
+        ```
+      </Step>
+
+      <Step title="Update your code">
+        ```typescript
+        import Anthropic from "@anthropic-ai/sdk";
+
+        const anthropic = new Anthropic({
+          apiKey: process.env.ANTHROPIC_API_KEY,
+          baseURL: "https://anthropic.helicone.ai",
+          defaultHeaders: {
+            "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+          },
+        });
+
+        const message = await anthropic.messages.create({
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [
+            { role: "user", content: "What is the meaning of life?" },
+          ],
+        });
+
+        console.log(message.content[0].text);
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Python">
+    <Steps>
+      <Step title="Install Anthropic SDK">
+        ```bash
+        pip install anthropic python-dotenv
+        ```
+      </Step>
+
+      <Step title="Set environment variables">
+        ```bash
+        HELICONE_API_KEY=sk-helicone-...
+        ANTHROPIC_API_KEY=sk-ant-...
+        ```
+      </Step>
+
+      <Step title="Update your code">
+        ```python
+        import anthropic
+        from dotenv import load_dotenv
+        import os
+
+        load_dotenv()
+
+        client = anthropic.Anthropic(
+            api_key=os.getenv("ANTHROPIC_API_KEY"),
+            base_url="https://anthropic.helicone.ai",
+            default_headers={
+                "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+            },
+        )
+
+        message = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=1024,
+            messages=[
+                {"role": "user", "content": "What is the meaning of life?"},
+            ],
+        )
+
+        print(message.content[0].text)
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="cURL">
+    <Steps>
+      <Step title="Set environment variables">
+        ```bash
+        export HELICONE_API_KEY=sk-helicone-...
+        export ANTHROPIC_API_KEY=sk-ant-...
+        ```
+      </Step>
+
+      <Step title="Make a request">
+        ```bash
+        curl https://anthropic.helicone.ai/v1/messages \
+          -H "Content-Type: application/json" \
+          -H "x-api-key: $ANTHROPIC_API_KEY" \
+          -H "Helicone-Auth: Bearer $HELICONE_API_KEY" \
+          -H "anthropic-version: 2023-06-01" \
+          -d '{
+            "model": "claude-3-5-sonnet-20241022",
+            "max_tokens": 1024,
+            "messages": [
+              {"role": "user", "content": "What is the meaning of life?"}
+            ]
+          }'
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Advanced Features
+
+### Custom Properties
+
+Add metadata to your requests for better filtering and analytics.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    ```typescript
+    const message = await anthropic.messages.create(
+      {
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 1024,
+        messages: [
+          { role: "user", content: "Write a haiku about AI" },
+        ],
+      },
+      {
+        headers: {
+          "Helicone-Property-Environment": "production",
+          "Helicone-Property-Feature": "haiku-generator",
+          "Helicone-User-Id": "user-123",
+        },
+      }
+    );
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    message = client.messages.create(
+        model="claude-3-5-sonnet-20241022",
+        max_tokens=1024,
+        messages=[
+            {"role": "user", "content": "Write a haiku about AI"},
+        ],
+        extra_headers={
+            "Helicone-Property-Environment": "production",
+            "Helicone-Property-Feature": "haiku-generator",
+            "Helicone-User-Id": "user-123",
+        },
+    )
+    ```
+  </Tab>
+</Tabs>
+
+### Session Tracking
+
+Group related requests into sessions to track conversations.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    ```typescript
+    const sessionId = "conversation-abc123";
+
+    const message = await anthropic.messages.create(
+      {
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 1024,
+        messages: [
+          { role: "user", content: "Hello!" },
+        ],
+      },
+      {
+        headers: {
+          "Helicone-Session-Id": sessionId,
+          "Helicone-Session-Name": "Customer Support Chat",
+          "Helicone-Session-Path": "/chat/support",
+        },
+      }
+    );
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    session_id = "conversation-abc123"
+
+    message = client.messages.create(
+        model="claude-3-5-sonnet-20241022",
+        max_tokens=1024,
+        messages=[
+            {"role": "user", "content": "Hello!"},
+        ],
+        extra_headers={
+            "Helicone-Session-Id": session_id,
+            "Helicone-Session-Name": "Customer Support Chat",
+            "Helicone-Session-Path": "/chat/support",
+        },
+    )
+    ```
+  </Tab>
+</Tabs>
+
+### Streaming Responses
+
+Helicone supports Anthropic's streaming API for real-time responses.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    ```typescript
+    const stream = await anthropic.messages.stream(
+      {
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 1024,
+        messages: [
+          { role: "user", content: "Tell me a story" },
+        ],
+      },
+      {
+        headers: {
+          "Helicone-Auth": `Bearer ${process.env.HELICONE_API_KEY}`,
+          "Helicone-Stream-Force-Format": "true",
+        },
+      }
+    );
+
+    for await (const chunk of stream) {
+      if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+        process.stdout.write(chunk.delta.text);
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    with client.messages.stream(
+        model="claude-3-5-sonnet-20241022",
+        max_tokens=1024,
+        messages=[
+            {"role": "user", "content": "Tell me a story"},
+        ],
+        extra_headers={
+            "Helicone-Auth": f"Bearer {os.getenv('HELICONE_API_KEY')}",
+            "Helicone-Stream-Force-Format": "true",
+        },
+    ) as stream:
+        for chunk in stream:
+            if chunk.type == "content_block_delta" and chunk.delta.type == "text_delta":
+                print(chunk.delta.text, end="", flush=True)
+    ```
+  </Tab>
+</Tabs>
+
+### Caching
+
+Enable semantic caching to reduce costs and latency.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    ```typescript
+    const message = await anthropic.messages.create(
+      {
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 1024,
+        messages: [
+          { role: "user", content: "What is the capital of France?" },
+        ],
+      },
+      {
+        headers: {
+          "Helicone-Cache-Enabled": "true",
+        },
+      }
+    );
+    ```
+  </Tab>
+
+  <Tab title="Python">
+    ```python
+    message = client.messages.create(
+        model="claude-3-5-sonnet-20241022",
+        max_tokens=1024,
+        messages=[
+            {"role": "user", "content": "What is the capital of France?"},
+        ],
+        extra_headers={
+            "Helicone-Cache-Enabled": "true",
+        },
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Supported Models
+
+Helicone supports all Anthropic Claude models:
+
+- **Claude 3.5**: claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022
+- **Claude 3**: claude-3-opus-20240229, claude-3-sonnet-20240229, claude-3-haiku-20240307
+- **Claude 2**: claude-2.1, claude-2.0
+- **Claude Instant**: claude-instant-1.2
+
+## Migration from AI Gateway
+
+Already using the AI Gateway? Here's how to use Anthropic specifically:
+
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.helicone.ai",
+  apiKey: process.env.HELICONE_API_KEY,
+});
+
+const response = await client.chat.completions.create({
+  model: "claude-3-5-sonnet-20241022",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+```
+
+## Monitoring and Analytics
+
+Once integrated, view your Anthropic usage in the Helicone dashboard:
+
+- **Request logs** - Full request/response data including streaming
+- **Cost tracking** - Real-time cost monitoring across Claude models
+- **Latency metrics** - Response time and time-to-first-token analysis
+- **Error tracking** - Failed requests and error patterns
+- **User analytics** - Per-user usage and costs
+
+<Card title="View Dashboard" icon="chart-line" href="https://us.helicone.ai/dashboard">
+  Monitor your Anthropic usage in real-time
+</Card>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="AI Gateway" icon="arrow-progress" href="/gateway/overview">
+    Use the unified API for 100+ models
+  </Card>
+  <Card title="Custom Properties" icon="tags" href="/observability/custom-properties">
+    Learn about custom properties and metadata
+  </Card>
+  <Card title="Sessions" icon="link" href="/observability/sessions">
+    Track multi-turn conversations
+  </Card>
+  <Card title="Caching" icon="bolt" href="/gateway/caching">
+    Reduce costs with semantic caching
+  </Card>
+</CardGroup>
